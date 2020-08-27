@@ -138,7 +138,8 @@ def conv2d_infer_layout(workload, cfg):
 
 
 
-def _get_workload(data, kernel, stride, padding, out_dtype, data_layout='NCHW'):
+def _get_workload(data, kernel, stride, padding, out_dtype, data_layout='NCHW',
+                  asymmetric_pad=False):
     """ Get the workload structure. """
     if data_layout == 'NCHW':
         _, CI, IH, IW = get_const_tuple(data.shape)
@@ -154,7 +155,10 @@ def _get_workload(data, kernel, stride, padding, out_dtype, data_layout='NCHW'):
     else:
         KH, KW, CIG, CO = get_const_tuple(kernel.shape)
 
-    HPAD, WPAD, _, _ = get_pad_tuple(padding, (get_const_int(KH), get_const_int(KW)))
+    if asymmetric_pad:
+        pt, pl, pb, pr = get_pad_tuple(padding, (get_const_int(KH), get_const_int(KW)))
+    else:
+        HPAD, WPAD, _, _ = get_pad_tuple(padding, (get_const_int(KH), get_const_int(KW)))
     GRPS = CI // CIG
     if isinstance(stride, (tuple, list)):
         HSTR, WSTR = stride
@@ -163,7 +167,11 @@ def _get_workload(data, kernel, stride, padding, out_dtype, data_layout='NCHW'):
     assert (data.dtype == kernel.dtype) or (data.dtype == 'uint8' and kernel.dtype == 'int8'), \
         "Do not support inputs with different data types now. ' \
         '{} vs. {}".format(data.dtype, kernel.dtype)
-    return Workload(data.dtype, out_dtype, IH, IW, CI, GRPS, CO, KH, KW, HPAD, WPAD, HSTR, WSTR)
+
+    if asymmetric_pad:
+        return Workload(data.dtype, out_dtype, IH, IW, CI, GRPS, CO, KH, KW, pt, pl, pb, pr, HSTR, WSTR)
+    else:
+        return Workload(data.dtype, out_dtype, IH, IW, CI, GRPS, CO, KH, KW, HPAD, WPAD, HSTR, WSTR)
 
 
 def conv2d_nchw(Input, Filter, stride, padding, dilation, out_dtype=None):
