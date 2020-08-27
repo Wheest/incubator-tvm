@@ -81,7 +81,7 @@ def get_device_ctx(libmod, ctx):
         ctx = [ctx]
     elif not isinstance(ctx, (list, tuple)):
         raise ValueError("ctx has to be the type of TVMContext or a list of "
-                         "TVMCTVMContext")
+                         "TVMContext")
     for cur_ctx in ctx:
         if not isinstance(cur_ctx, TVMContext):
             raise ValueError("ctx has to be the type of TVMContext or a list "
@@ -152,7 +152,10 @@ class GraphModule(object):
            Additional arguments
         """
         if key is not None:
-            self._get_input(key).copyfrom(value)
+            v = self._get_input(key)
+            if v is None:
+                raise RuntimeError("Could not find '%s' in graph's inputs" % key)
+            v.copyfrom(value)
 
         if params:
             # upload big arrays first to avoid memory issue in rpc mode
