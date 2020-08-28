@@ -32,6 +32,11 @@ Workload = namedtuple('Workload',
                       ['in_dtype', 'out_dtype', 'height', 'width', 'in_filter', 'groups',
                        'out_filter', 'hkernel', 'wkernel', 'hpad', 'wpad', 'hstride', 'wstride'])
 
+Workload_asym = namedtuple('Workload',
+                           ['in_dtype', 'out_dtype', 'height', 'width', 'in_filter', 'groups',
+                            'out_filter', 'hkernel', 'wkernel', 'padt', 'padb', 'padl', 'padr',
+                            'hstride', 'wstride'])
+
 def conv2d(input, filter, strides, padding, dilation, layout='NCHW', out_dtype=None):
     """Conv2D operator.
 
@@ -169,7 +174,7 @@ def _get_workload(data, kernel, stride, padding, out_dtype, data_layout='NCHW',
         '{} vs. {}".format(data.dtype, kernel.dtype)
 
     if asymmetric_pad:
-        return Workload(data.dtype, out_dtype, IH, IW, CI, GRPS, CO, KH, KW, pt, pl, pb, pr, HSTR, WSTR)
+        return Workload_asym(data.dtype, out_dtype, IH, IW, CI, GRPS, CO, KH, KW, pt, pl, pb, pr, HSTR, WSTR)
     else:
         return Workload(data.dtype, out_dtype, IH, IW, CI, GRPS, CO, KH, KW, HPAD, WPAD, HSTR, WSTR)
 
