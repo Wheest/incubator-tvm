@@ -174,9 +174,13 @@ def _get_workload(data, kernel, stride, padding, out_dtype, data_layout='NCHW',
         '{} vs. {}".format(data.dtype, kernel.dtype)
 
     if asymmetric_pad:
-        return Workload_asym(data.dtype, out_dtype, IH, IW, CI, GRPS, CO, KH, KW, pt, pl, pb, pr, HSTR, WSTR)
+        workload =  Workload_asym(data.dtype, out_dtype, IH, IW, CI, GRPS,
+                                  CO, KH, KW, pt, pl, pb, pr, HSTR, WSTR)
     else:
-        return Workload(data.dtype, out_dtype, IH, IW, CI, GRPS, CO, KH, KW, HPAD, WPAD, HSTR, WSTR)
+        workload =  Workload(data.dtype, out_dtype, IH, IW, CI, GRPS,
+                             CO, KH, KW, HPAD, WPAD, HSTR, WSTR)
+
+    return workload
 
 
 def conv2d_nchw(Input, Filter, stride, padding, dilation, out_dtype=None):
