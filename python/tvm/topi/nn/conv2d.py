@@ -174,11 +174,11 @@ def _get_workload(data, kernel, stride, padding, out_dtype, data_layout='NCHW',
         '{} vs. {}".format(data.dtype, kernel.dtype)
 
     if asymmetric_pad:
-        workload =  Workload_asym(data.dtype, out_dtype, IH, IW, CI, GRPS,
-                                  CO, KH, KW, pt, pl, pb, pr, HSTR, WSTR)
+        workload = Workload_asym(data.dtype, out_dtype, IH, IW, CI, GRPS,
+                                 CO, KH, KW, pt, pl, pb, pr, HSTR, WSTR)
     else:
-        workload =  Workload(data.dtype, out_dtype, IH, IW, CI, GRPS,
-                             CO, KH, KW, HPAD, WPAD, HSTR, WSTR)
+        workload = Workload(data.dtype, out_dtype, IH, IW, CI, GRPS,
+                            CO, KH, KW, HPAD, WPAD, HSTR, WSTR)
 
     return workload
 
