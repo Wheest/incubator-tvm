@@ -39,4 +39,5 @@ from .conv2d_transpose import *
 from .conv3d_transpose import *
 from .sparse import *
 from .conv2d_alter_op import *
+from .scatter import *
 from .group_conv2d import *

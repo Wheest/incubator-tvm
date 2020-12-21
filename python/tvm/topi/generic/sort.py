@@ -20,6 +20,23 @@ from __future__ import absolute_import as _abs
 from .default import default_schedule as _default_schedule
 
 
+def schedule_sort(outs):
+    """Schedule for sort operator.
+
+    Parameters
+    ----------
+    outs: Array of Tensor
+      The indices that would sort an input array along
+      the given axis.
+
+    Returns
+    -------
+    s: Schedule
+      The computation schedule for the op.
+    """
+    return _default_schedule(outs, False)
+
+
 def schedule_argsort(outs):
     """Schedule for argsort operator.
 
@@ -35,6 +52,7 @@ def schedule_argsort(outs):
       The computation schedule for the op.
     """
     return _default_schedule(outs, False)
+
 
 def schedule_topk(outs):
     """Schedule for topk operator.

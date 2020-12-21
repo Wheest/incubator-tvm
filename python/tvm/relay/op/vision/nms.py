@@ -19,10 +19,7 @@ from tvm.relay import expr
 from . import _make
 
 
-def get_valid_counts(data,
-                     score_threshold,
-                     id_index=0,
-                     score_index=1):
+def get_valid_counts(data, score_threshold, id_index=0, score_index=1):
     """Get valid count of bounding boxes given a score threshold.
     Also moves valid boxes to the top of input data.
 
@@ -51,23 +48,27 @@ def get_valid_counts(data,
     out_indices: relay.Expr
         Indices in input data
     """
+    if not isinstance(score_threshold, expr.Expr):
+        score_threshold = expr.const(score_threshold, "float32")
     return expr.TupleWrapper(
-        _make.get_valid_counts(data, score_threshold,
-                               id_index, score_index), 3)
+        _make.get_valid_counts(data, score_threshold, id_index, score_index), 3
+    )
 
 
-def non_max_suppression(data,
-                        valid_count,
-                        indices,
-                        max_output_size=-1,
-                        iou_threshold=0.5,
-                        force_suppress=False,
-                        top_k=-1,
-                        coord_start=2,
-                        score_index=1,
-                        id_index=0,
-                        return_indices=True,
-                        invalid_to_bottom=False):
+def non_max_suppression(
+    data,
+    valid_count,
+    indices,
+    max_output_size=-1,
+    iou_threshold=0.5,
+    force_suppress=False,
+    top_k=-1,
+    coord_start=2,
+    score_index=1,
+    id_index=0,
+    return_indices=True,
+    invalid_to_bottom=False,
+):
     """Non-maximum suppression operator for object detection.
 
     Parameters
@@ -95,7 +96,7 @@ def non_max_suppression(data,
         Max number of output valid boxes for each instance.
         Return all valid boxes if the value of max_output_size is less than 0.
 
-    iou_threshold : float, optional
+    iou_threshold : float or relay.Expr, optional
         Non-maximum suppression threshold.
 
     force_suppress : bool, optional
@@ -127,20 +128,24 @@ def non_max_suppression(data,
         If return_indices is True, return relay.Tuple of two 2-D tensors, with
         shape [batch_size, num_anchors] and [batch_size, num_valid_anchors] respectively.
     """
-    if isinstance(max_output_size, int):
+    if not isinstance(max_output_size, expr.Expr):
         max_output_size = expr.const(max_output_size, "int32")
-    out = _make.non_max_suppression(data,
-                                    valid_count,
-                                    indices,
-                                    max_output_size,
-                                    iou_threshold,
-                                    force_suppress,
-                                    top_k,
-                                    coord_start,
-                                    score_index,
-                                    id_index,
-                                    return_indices,
-                                    invalid_to_bottom)
+    if not isinstance(iou_threshold, expr.Expr):
+        iou_threshold = expr.const(iou_threshold, "float32")
+    out = _make.non_max_suppression(
+        data,
+        valid_count,
+        indices,
+        max_output_size,
+        iou_threshold,
+        force_suppress,
+        top_k,
+        coord_start,
+        score_index,
+        id_index,
+        return_indices,
+        invalid_to_bottom,
+    )
     if return_indices:
         return expr.TupleWrapper(out, 2)
     return out

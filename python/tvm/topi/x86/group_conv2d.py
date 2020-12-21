@@ -23,12 +23,12 @@ from tvm import autotvm
 from tvm import te
 from tvm.autotvm.task.space import SplitEntity, OtherOptionEntity
 
-from .util import get_fp32_len
-from ..util import get_const_tuple
+from .utils import get_fp32_len
+from ..utils import get_const_tuple
 from ..nn.pad import pad
 from .. import tag
 
-from ..nn.util import infer_pad
+from ..nn.utils import infer_pad
 from ..nn.conv2d import _get_workload as _get_conv2d_workload
 
 
@@ -58,15 +58,15 @@ def _get_default_config(cfg, data, kernel, strides, padding, groups,
     data = te.placeholder(static_data_shape, dtype=data.dtype)
 
     wkl = _get_conv2d_workload(data, kernel, strides, padding, out_dtype,
-                               layout, asymmetric_pad=True)
+                               layout)
     _fallback_schedule(cfg, wkl)
 
 
 def _fallback_schedule(cfg, wkl):
     simd_width = get_fp32_len()
-    pad_left, pad_right = wkl.padl, wkl.padr
+    hpad = wkl.hpad
     stride_w = wkl.wstride
-    out_width = (wkl.width + pad_left + pad_right - wkl.wkernel) // stride_w + 1
+    out_width = (wkl.width + 2*hpad - wkl.wkernel) // stride_w + 1
     groups = wkl.groups
     kernels_per_group = wkl.out_filter // groups
     kernel_depth = wkl.in_filter // groups

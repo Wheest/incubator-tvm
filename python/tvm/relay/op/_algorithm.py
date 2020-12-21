@@ -24,15 +24,23 @@ from tvm.runtime import convert
 from . import strategy
 from . import op as _reg
 from .op import OpPattern, register_pattern
-from .op import register_strategy
+from .op import register_strategy, register_shape_func
+from ._tensor import elemwise_shape_func
+
+# sort
+register_strategy("sort", strategy.sort_strategy)
+register_pattern("sort", OpPattern.OPAQUE)
+register_shape_func("sort", False, elemwise_shape_func)
 
 # argsort
 register_strategy("argsort", strategy.argsort_strategy)
 register_pattern("argsort", OpPattern.OPAQUE)
+register_shape_func("argsort", False, elemwise_shape_func)
 
 # topk
 register_strategy("topk", strategy.topk_strategy)
 register_pattern("topk", OpPattern.OPAQUE)
+
 
 @script
 def _topk_shape_func_input_shape(data_shape, k, axis):
@@ -53,6 +61,7 @@ def _topk_shape_func_input_shape(data_shape, k, axis):
                 indices_out[i] = int64(k)
     return val_out, indices_out
 
+
 @_reg.register_shape_func("topk", False)
 def topk_shape_func(attrs, inputs, _):
     """
@@ -61,8 +70,7 @@ def topk_shape_func(attrs, inputs, _):
     axis = attrs.axis
     if axis < 0:
         axis += inputs[0].shape[0]
-    val_out, indices_out = \
-        _topk_shape_func_input_shape(inputs[0], attrs.k, convert(axis))
+    val_out, indices_out = _topk_shape_func_input_shape(inputs[0], attrs.k, convert(axis))
     ret_type = attrs.ret_type
     if ret_type == "both":
         ret = [val_out, indices_out]
