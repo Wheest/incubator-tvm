@@ -26,6 +26,7 @@ from tvm import relay
 from tvm import autotvm
 from .conv2d import _get_default_config
 from .conv2d_int8 import is_int8_hw_support, _get_default_config_int8
+from .group_conv2d import _get_default_config as _get_default_config_grouped
 from ..utils import get_const_tuple
 from ..nn import conv2d_legalize, conv2d_alter_layout
 from ..nn.utils import get_pad_tuple
@@ -63,6 +64,7 @@ def _alter_conv2d_layout(attrs, inputs, tinfos, out_type):
     dilation = attrs.get_int_tuple("dilation")
     data_layout = attrs["data_layout"]
     kernel_layout = attrs["kernel_layout"]
+    groups = attrs["groups"]
     data_tensor, kernel_tensor = tinfos
     data_dtype = data_tensor.dtype
     kernel_dtype = kernel_tensor.dtype
@@ -214,6 +216,55 @@ def _alter_conv2d_layout(attrs, inputs, tinfos, out_type):
             assert _OIHWio_matcher.match(kernel_layout)
         return relay.nn.contrib_depthwise_conv2d_nchwc(*inputs, **new_attrs)
 
+    if topi_tmpl == "group_conv2d_nchw.x86":
+        if data_layout == "NCHW" and kernel_layout == "OIHW":
+            if cfg.is_fallback:
+                _get_default_config_grouped(
+                    cfg, data_tensor, kernel_tensor, strides, padding, groups,
+                    out_dtype
+                )
+            batch_size, in_channel, height, width = get_const_tuple(data_tensor.shape)
+            out_channel, kernel_depth, kh, kw = get_const_tuple(kernel_tensor.shape)
+            ic_bn, oc_bn = cfg["tile_ic"].size[-1], cfg["tile_oc"].size[-1]
+
+            # update new attrs
+            new_attrs["channels"] = out_channel
+            new_attrs["data_layout"] = "NCHW%dc" % ic_bn
+            new_attrs["kernel_layout"] = "OIHW%di%do" % (ic_bn, oc_bn)
+            new_attrs["out_layout"] = "NCHW%dc" % oc_bn
+            new_attrs["groups"] = groups
+
+            kernels_per_group = out_channel // groups
+            # Store altered operator's config
+            new_data = te.placeholder(
+                (groups, batch_size, kernel_depth // ic_bn,
+                 height, ic_bn, width), dtype=data_dtype
+            )
+            new_kernel = te.placeholder(
+                (groups, kernels_per_group//oc_bn, kernel_depth//ic_bn,
+                 kh, kw, ic_bn, oc_bn),
+                dtype=kernel_tensor.dtype,
+            )
+            new_workload = autotvm.task.args_to_workload(
+                [
+                    new_data,
+                    new_kernel,
+                    strides,
+                    padding,
+                    dilation,
+                    new_attrs["groups"],
+                    new_attrs["data_layout"],
+                    new_attrs["out_layout"],
+                    out_dtype,
+                ],
+                topi_tmpl,
+            )
+            dispatch_ctx.update(target, new_workload, cfg)
+        else:
+            assert _NCHWc_matcher.match(data_layout)
+            assert _OIHWio_matcher.match(kernel_layout)
+        print('hello friend', new_attrs)
+        return relay.nn.contrib_group_conv2d_nchwc(*inputs, **new_attrs)
     return None
 
 
@@ -361,4 +412,5 @@ def _conv2d_legalize(attrs, inputs, arg_types):
             out = relay.subtract(out, adjust_shift)
 
         return out
+
     return None
