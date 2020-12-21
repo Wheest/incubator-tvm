@@ -283,9 +283,7 @@ def schedule_group_conv2d_nchw(cfg, outs):
             args = [s, cfg, data, data_pad, data_vec, kernel_vec, conv_out, output, outs[0]]
             _schedule_gspc_nchw(*args)
         elif 'group_conv2d_NCHWc' in op.tag:
-            return
-            #output = op.output(0)
-
+            ...
         scheduled_ops.append(op)
 
     traverse(outs[0].op)
@@ -372,6 +370,7 @@ def _schedule_gspc_nchw(s, cfg, data, data_pad, data_vec, kernel_vec, conv_out, 
     s[O].vectorize(oc_block)
     s[O].parallel(parallel_axis)
     return s
+
 
 def group_conv2d_NCHWc(data, kernel, strides, padding, dilation,
                        data_layout, out_layout, out_dtype):

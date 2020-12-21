@@ -264,7 +264,6 @@ def _alter_conv2d_layout(attrs, inputs, tinfos, out_type):
             assert _NCHWc_matcher.match(data_layout)
             assert _OIHWio_matcher.match(kernel_layout)
         return relay.nn.contrib_group_conv2d_nchwc(*inputs, **new_attrs)
-
     return None
 
 
@@ -412,4 +411,5 @@ def _conv2d_legalize(attrs, inputs, arg_types):
             out = relay.subtract(out, adjust_shift)
 
         return out
+
     return None
