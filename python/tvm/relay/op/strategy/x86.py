@@ -178,17 +178,7 @@ def conv2d_strategy_cpu(attrs, inputs, out_type, target):
             strategy.add_implementation(
                 wrap_compute_conv2d(topi.x86.group_conv2d_nchw, has_groups=True),
                 wrap_topi_schedule(topi.x86.schedule_group_conv2d_nchw),
-                name="group_conv2d_nchw.x86",
-            )
-        elif layout == "NHWC":
-            assert kernel_layout == "HWIO"
-            if not is_auto_scheduler_enabled():
-                logger.warning("group_conv2d is not optimized for x86 with autotvm.")
-            strategy.add_implementation(
-                wrap_compute_conv2d(topi.nn.group_conv2d_nhwc, has_groups=True),
-                wrap_topi_schedule(topi.generic.schedule_group_conv2d_nhwc),
-                name="group_conv2d_nhwc.generic",
-            )
+                name="group_conv2d_nchw.x86")
         else:
             raise RuntimeError("Unsupported group_conv2d layout {}".format(layout))
     return strategy
