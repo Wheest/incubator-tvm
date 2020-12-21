@@ -205,6 +205,21 @@ def conv2d_NCHWc_strategy_cpu(attrs, inputs, out_type, target):
     return strategy
 
 
+@group_conv2d_NCHWc_strategy.register("cpu")
+def group_conv2d_NCHWc_strategy_cpu(attrs, inputs, out_type, target):
+    """group conv2d_NCHWc x86 strategy"""
+    strategy = _op.OpStrategy()
+    data, kernel = inputs
+    print('hey strat', attrs)
+    print(data.shape, kernel.shape)
+    strategy.add_implementation(
+        wrap_compute_conv2d(topi.x86.group_conv2d_NCHWc, True, True),
+        wrap_topi_schedule(topi.x86.schedule_group_conv2d_nchw),
+        name="group_conv2d_NCHWc.x86",
+    )
+    return strategy
+
+
 @depthwise_conv2d_NCHWc_strategy.register("cpu")
 def depthwise_conv2d_NCHWc_strategy_cpu(attrs, inputs, out_type, target):
     """depthwise_conv2d x86 strategy"""

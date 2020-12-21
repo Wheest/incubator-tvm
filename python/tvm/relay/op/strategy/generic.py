@@ -312,6 +312,20 @@ def conv2d_NCHWc_strategy(attrs, inputs, out_type, target):
     return strategy
 
 
+# group_conv2d_NCHWc
+@override_native_generic_func("group_conv2d_NCHWc_strategy")
+def group_conv2d_NCHWc_strategy(attrs, inputs, out_type, target):
+    """group_conv2d_NCHWc generic strategy"""
+    logger.warning("group_conv2d_NCHWc is not optimized for this platform.")
+    strategy = _op.OpStrategy()
+    strategy.add_implementation(
+        wrap_compute_conv2d(topi.x86.conv2d_NCHWc, True, True),
+        wrap_topi_schedule(topi.x86.schedule_group_conv2d_nchw),
+        name="conv2d_NCHWc.generic",
+    )
+    return strategy
+
+
 # depthwise_conv2d_NCHWc
 @override_native_generic_func("depthwise_conv2d_NCHWc_strategy")
 def depthwise_conv2d_NCHWc_strategy(attrs, inputs, out_type, target):
