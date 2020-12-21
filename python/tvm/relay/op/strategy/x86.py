@@ -178,7 +178,7 @@ def conv2d_strategy_cpu(attrs, inputs, out_type, target):
             strategy.add_implementation(
                 wrap_compute_conv2d(topi.x86.group_conv2d_nchw, has_groups=True),
                 wrap_topi_schedule(topi.x86.schedule_group_conv2d_nchw),
-                name="group_conv2d_nchw.x86"
+                name="group_conv2d_nchw.x86",
             )
         else:
             raise RuntimeError("Unsupported group_conv2d layout {}".format(layout))
