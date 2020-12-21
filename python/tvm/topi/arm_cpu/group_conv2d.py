@@ -32,7 +32,6 @@ from ..nn.conv2d import _get_workload as _get_conv2d_workload
 
 
 
-
 def group_conv2d_nchw(data, kernel, strides, padding, dilation, groups,
                       out_dtype):
     """Compute group_conv2d with NCHW layout"""
