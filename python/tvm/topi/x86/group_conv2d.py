@@ -283,26 +283,7 @@ def schedule_group_conv2d_nchw(cfg, outs):
             args = [s, cfg, data, data_pad, data_vec, kernel_vec, conv_out, output, outs[0]]
             _schedule_gspc_nchw(*args)
         elif 'group_conv2d_NCHWc' in op.tag:
-            output = op.output(0)
-
-            if "tile_ic" not in cfg:
-                return
-            conv_out = op.input_tensors[0]
-            kernel_vec = conv_out.op.input_tensors[1]
-            kernel = kernel_vec.op.input_tensors[0]
-            if isinstance(kernel.op, tvm.te.ComputeOp) and "dilate" in kernel.op.tag:
-                s[kernel].compute_inline()
-            data_vec = conv_out.op.input_tensors[0]
-            data = data_vec.op.input_tensors[0]
-            data_pad = None
-            if isinstance(data.op, tvm.te.ComputeOp) and "pad" in data.op.tag:
-                data_pad = data
-                data = data_pad.op.input_tensors[0]
-
-            args = [s, cfg, data, data_pad, data_vec, kernel_vec, conv_out,
-                    output, outs[0]]
-            _schedule_gspc_nchw(*args)
-
+            ...
         scheduled_ops.append(op)
 
     traverse(outs[0].op)
