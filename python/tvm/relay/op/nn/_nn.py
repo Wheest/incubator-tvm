@@ -628,6 +628,10 @@ reg.register_pattern("nn.contrib_conv2d_winograd_nnpack_weight_transform", OpPat
 reg.register_strategy("nn.contrib_conv2d_NCHWc", strategy.conv2d_NCHWc_strategy)
 reg.register_pattern("nn.contrib_conv2d_NCHWc", OpPattern.OUT_ELEMWISE_FUSABLE)
 
+# group_conv2d_NCHWc
+reg.register_strategy("nn.contrib_group_conv2d_NCHWc", strategy.group_conv2d_NCHWc_strategy)
+reg.register_pattern("nn.contrib_group_conv2d_NCHWc", OpPattern.OUT_ELEMWISE_FUSABLE)
+
 # depthwise_conv2d_NCHWc
 reg.register_strategy("nn.contrib_depthwise_conv2d_NCHWc", strategy.depthwise_conv2d_NCHWc_strategy)
 reg.register_pattern("nn.contrib_depthwise_conv2d_NCHWc", OpPattern.OUT_ELEMWISE_FUSABLE)

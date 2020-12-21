@@ -248,7 +248,7 @@ def group_conv2d_nchw_spatial_pack(
 
 
 @autotvm.register_topi_schedule("group_conv2d_nchw.x86")
-def schedule_group_conv2d_nchwc(cfg, outs):
+def schedule_group_conv2d_nchw(cfg, outs):
     """Create schedule for tensors"""
     s = te.create_schedule([x.op for x in outs])
     scheduled_ops = []
@@ -281,6 +281,26 @@ def schedule_group_conv2d_nchwc(cfg, outs):
                 data = data_pad.op.input_tensors[0]
 
             args = [s, cfg, data, data_pad, data_vec, kernel_vec, conv_out, output, outs[0]]
+            _schedule_gspc_nchw(*args)
+        elif 'group_conv2d_NCHWc' in op.tag:
+            output = op.output(0)
+
+            if "tile_ic" not in cfg:
+                return
+            conv_out = op.input_tensors[0]
+            kernel_vec = conv_out.op.input_tensors[1]
+            kernel = kernel_vec.op.input_tensors[0]
+            if isinstance(kernel.op, tvm.te.ComputeOp) and "dilate" in kernel.op.tag:
+                s[kernel].compute_inline()
+            data_vec = conv_out.op.input_tensors[0]
+            data = data_vec.op.input_tensors[0]
+            data_pad = None
+            if isinstance(data.op, tvm.te.ComputeOp) and "pad" in data.op.tag:
+                data_pad = data
+                data = data_pad.op.input_tensors[0]
+
+            args = [s, cfg, data, data_pad, data_vec, kernel_vec, conv_out,
+                    output, outs[0]]
             _schedule_gspc_nchw(*args)
 
         scheduled_ops.append(op)
@@ -369,3 +389,152 @@ def _schedule_gspc_nchw(s, cfg, data, data_pad, data_vec, kernel_vec, conv_out, 
     s[O].vectorize(oc_block)
     s[O].parallel(parallel_axis)
     return s
+
+
+def group_conv2d_NCHWc(data, kernel, strides, padding, dilation,
+                       data_layout, out_layout, out_dtype):
+    """Compute group_conv2d with NCHWc layout"""
+    return group_conv2d_NCHWc_spatial_pack(data, kernel, strides, padding,
+                                           dilation, out_dtype)
+
+
+@autotvm.register_topi_compute("group_conv2d_NCHWc.x86")
+def group_conv2d_NCHWc_spatial_pack(cfg, data, kernel, strides, padding,
+                                    dilation, out_dtype='float32'):
+    """
+    Compute group conv2d with NCHWc layout, using GSPC algorithm.
+    https://arxiv.org/abs/2006.09791
+    """
+    print(cfg)
+    print(data, len(data.shape), data.shape)
+    print(kernel, len(kernel.shape), kernel.shape)
+    print(strides, padding, dilation)
+    if len(data.shape) == 6:
+        groups, batch_size, kernel_depth_div_ic_bn, \
+            in_height, ic_bn, in_width = get_const_tuple(data.shape)
+        groups, kpg_div_oc_bn, _, k_height, k_width, ic_bn, oc_bn = get_const_tuple(
+            kernel.shape
+        )
+        in_channel = ic_chunk * ic_bn
+        num_filter = oc_chunk * oc_bn
+        kernel_depth =  kernel_depth_div_ic_bn * ic_bn
+        kernels_per_group = kpg_div_oc_bn * oc_bn
+    else:
+        n, in_channel, in_height, in_width = get_const_tuple(data.shape)
+        num_filter, kernel_depth,  \
+            kernel_height, kernel_width = get_const_tuple(kernel.shape)
+
+    assert isinstance(dilation, int) or len(dilation) == 2
+    if isinstance(dilation, int):
+        dilation_h, dilation_w = dilation, dilation
+    else:
+        dilation_h, dilation_w = dilation
+
+    assert isinstance(padding, int) or len(padding) == 2 or len(padding) == 4
+    if isinstance(padding, int):
+        pad_top, pad_left, pad_bottom, pad_right = padding, padding, padding, padding
+    elif len(padding) == 2:
+        hpad, wpad = padding
+        pad_top, pad_bottom = hpad, hpad
+        pad_left, pad_right = wpad, wpad
+    else:
+        pad_top, pad_left, pad_bottom, pad_right = padding
+
+    hpad = pad_top + pad_bottom
+    wpad = pad_left + pad_right
+
+    assert isinstance(strides, int) or len(strides) == 2
+    if isinstance(strides, int):
+        stride_h, stride_w = strides, strides
+    else:
+        stride_h, stride_w = strides
+
+    pad_height = in_height + pad_top + pad_bottom
+    pad_width = in_width + pad_left + pad_right
+
+    dilated_kernel_h = (k_height - 1) * dilation_h + 1
+    dilated_kernel_w = (k_width - 1) * dilation_w + 1
+    out_height = (in_height + pad_top + pad_bottom - dilated_kernel_h) // stride_h + 1
+    out_width = (in_width + pad_left + pad_right - dilated_kernel_w) // stride_w + 1
+
+    kernels_per_group = out_channel // groups
+
+    cfg.define_split("tile_ic", in_channel, num_outputs=2)
+    cfg.define_split("tile_oc", out_channel, num_outputs=2)
+    cfg.define_split("tile_ow", out_width, num_outputs=2, filter=lambda y: y.size[-1] <= 64)
+    cfg.define_knob("unroll_kw", [True, False])
+
+    # If no config was set, we can fallback to default config.
+    if cfg.is_fallback:
+        _get_default_config(cfg, te.placeholder((batch_size, in_channel, in_height, in_width),
+                                                dtype=data.dtype),
+                            te.placeholder((out_channel, in_channel // groups, k_height, k_width),
+                                           dtype=kernel.dtype),
+                            strides, padding, groups, out_dtype)
+
+    oc_bn = cfg['tile_oc'].size[-1]
+    ic_bn = cfg['tile_ic'].size[-1]
+
+    # pack data
+    DOPAD = (hpad != 0 or wpad != 0)
+    if DOPAD:
+        data_pad = pad(data,
+                       (0, 0, pad_top, pad_left),
+                       (0, 0, pad_bottom, pad_right),
+                       name="data_pad")
+    else:
+        data_pad = data
+
+    shape = (groups, batch_size, kernel_depth // ic_bn,
+             pad_height, ic_bn, pad_width)
+
+    # Pack data if raw 4-D data is provided.
+    # This can only happen when autotuning.
+    if len(data.shape) == 4:
+        if autotvm.GLOBAL_SCOPE.in_tuning:
+            # Directly use modified data layout placeholder.
+            data_vec = te.compute(shape,
+                                  lambda g, n, C, h, c, w:
+                                  data_pad[n, C * ic_bn + c + kernel_depth * g, h, w],
+                                  name='data_vec')
+
+            # pack kernel
+            shape = (groups, kernels_per_group//oc_bn, kernel_depth//ic_bn,
+                     k_height, k_width, ic_bn, oc_bn)
+            kernel_vec = te.compute(shape,
+                                    lambda g, out_channel, in_channel, h, w, ci, co:
+                                    kernel[(out_channel * oc_bn + co + g * kernels_per_group),
+                                           in_channel * ic_bn + ci, h, w],
+                                    name='kernel_vec')
+
+    # convolution
+    oshape = (groups, batch_size, kernels_per_group//oc_bn,
+              out_height, out_width, oc_bn)
+    unpack_shape = (batch_size, out_channel, out_height, out_width)
+
+    ic = te.reduce_axis((0, (kernel_depth)), name='ic')
+    kh = te.reduce_axis((0, k_height), name='kh')
+    kw = te.reduce_axis((0, k_width), name='kw')
+    idxmod = tvm.tir.indexmod
+    idxdiv = tvm.tir.indexdiv
+
+    conv = te.compute(oshape, lambda g, n, oc_chunk, oh, ow, oc_block:
+                      te.sum(data_vec[g, n, idxdiv(ic, ic_bn),
+                                      oh * stride_h + kh * dilation_h,
+                                      idxmod(ic, ic_bn),
+                                      ow * stride_w + kw * dilation_w].astype(out_dtype) *
+                             kernel_vec[g, oc_chunk, idxdiv(ic, ic_bn),
+                                        kh, kw, idxmod(ic, ic_bn),
+                                        oc_block].astype(out_dtype),
+                             axis=[ic, kh, kw]), name='conv')
+
+    unpack = te.compute(unpack_shape,
+                        lambda n, c, h, w:
+                        conv[idxdiv(c, kernels_per_group), n,
+                             idxmod(idxdiv(c, oc_bn), (kernels_per_group // oc_bn)),
+                             h, w,
+                             idxmod(idxmod(c, oc_bn), kernels_per_group)]
+                        .astype(out_dtype),
+                        name='output_unpack',
+                        tag='group_conv2d_nchw')
+    return unpack
