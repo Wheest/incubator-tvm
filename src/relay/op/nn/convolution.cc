@@ -547,6 +547,21 @@ TVM_REGISTER_GLOBAL("relay.op.nn._make.contrib_depthwise_conv2d_NCHWc")
                                    "nn.contrib_depthwise_conv2d_NCHWc");
     });
 
+RELAY_REGISTER_OP("nn.contrib_group_conv2d_NCHWc")
+    .describe(R"code(Compute group conv2d with NCHWc data layout. Only supports NCHW layout.
+- **data**: Input is 6D packed tensor.
+- **weight**: 7D packed tensor.
+
+- **out**:  Output is 6D packed tensor
+)code" TVM_ADD_FILELINE)
+    .set_attrs_type<Conv2DAttrs>()
+    .set_num_inputs(2)
+    .add_argument("data", "Tensor", "The input tensor.")
+    .add_argument("weight", "Tensor", "The weight tensor.")
+    .set_support_level(10)
+    .add_type_rel("Conv2DNCHWc", Conv2DWinogradRel<Conv2DAttrs>)
+    .set_attr<FInferCorrectLayout>("FInferCorrectLayout", ConvInferCorrectLayout<Conv2DAttrs>);
+
 RELAY_REGISTER_OP("nn.contrib_depthwise_conv2d_NCHWc")
     .describe(R"code(Compute conv2d with NCHWc data layout. Only supports NCHW layout.
 - **data**: Input is 5D packed tensor.

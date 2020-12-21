@@ -263,7 +263,6 @@ def _alter_conv2d_layout(attrs, inputs, tinfos, out_type):
         else:
             assert _NCHWc_matcher.match(data_layout)
             assert _OIHWio_matcher.match(kernel_layout)
-        print('hello friend', new_attrs)
         return relay.nn.contrib_group_conv2d_nchwc(*inputs, **new_attrs)
     return None
 
