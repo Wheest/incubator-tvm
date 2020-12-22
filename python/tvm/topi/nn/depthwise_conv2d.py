@@ -76,7 +76,7 @@ def _get_workload(data, kernel, stride, padding, out_dtype):
         pt,
         pl,
         pb,
-        pr
+        pr,
         HSTR,
         WSTR,
     )
