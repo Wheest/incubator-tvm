@@ -449,6 +449,7 @@ def verify_conv2d_nchw_int8(
             )
             func(a, w, c)
         tvm.testing.assert_allclose(c.asnumpy(), c_np, rtol=1e-5)
+        test_worload_padding(C, A, W, (stride, stride), padding, dtype)
 
     verify_fallback_schedule_cpu_padding()
     for device in ["cuda"]:
@@ -607,4 +608,4 @@ def test_conv2d_nhwc():
 
 if __name__ == "__main__":
     test_conv2d_nchw()
-    # test_conv2d_nhwc()
+    test_conv2d_nhwc()
