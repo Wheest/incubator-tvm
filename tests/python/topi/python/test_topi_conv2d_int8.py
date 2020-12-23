@@ -399,7 +399,6 @@ def verify_conv2d_nchw_int8(
 
         tvm.testing.assert_allclose(ow_tile, out_width)
 
-
     def check_device(device):
         ctx = tvm.context(device, 0)
         if not tvm.testing.device_enabled(device):
