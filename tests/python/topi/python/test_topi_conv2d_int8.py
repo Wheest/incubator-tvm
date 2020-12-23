@@ -387,15 +387,15 @@ def verify_conv2d_nchw_int8(
 
     a_np, w_np, b_np, c_np = get_ref_data()
 
-    def test_worload_padding(output_data, data, kernel, strides, padding, out_dtype):
-        _, _, out_height, out_width = get_const_tuple(output_data.shape)
-        wkl = _get_workload(data, kernel, strides, padding, out_dtype)
-        int32_lanes, num_int8_elements = 16, 4
+    def verify_fallback_schedule_cpu_padding():
+        _, _, out_height, out_width = get_const_tuple(c_np.shape)
+        wkl = _get_workload(data, kernel, (stride, stride), padding, dilation, dtype)
+        int32_lanes, num_int8_elements = num_filter, in_channel
 
         # check if tile_ow candidates are the factors of the right output weight.
         cfg = autotvm.get_config()
         fallback_schedule_cpu_common_int8(cfg, wkl, int32_lanes, num_int8_elements)
-        ow_tile = cfg["tile_ow"].size[-1] * cfg["tile_ow"].size[-2]
+        ow_tile = np.prod(cfg["tile_ow"].size)
 
         tvm.testing.assert_allclose(ow_tile, out_width)
 
@@ -449,8 +449,8 @@ def verify_conv2d_nchw_int8(
             )
             func(a, w, c)
         tvm.testing.assert_allclose(c.asnumpy(), c_np, rtol=1e-5)
-        test_worload_padding(C, A, W, (stride, stride), padding, dtype)
 
+    verify_fallback_schedule_cpu_padding()
     for device in ["cuda"]:
         check_device(device)
 
@@ -607,4 +607,4 @@ def test_conv2d_nhwc():
 
 if __name__ == "__main__":
     test_conv2d_nchw()
-    test_conv2d_nhwc()
+    # test_conv2d_nhwc()

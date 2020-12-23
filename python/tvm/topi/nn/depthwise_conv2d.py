@@ -42,18 +42,21 @@ Workload = namedtuple(
         "padl",
         "padb",
         "padr",
+        "hdilation",
+        "wdilation",
         "hstride",
         "wstride",
     ],
 )
 
 
-def _get_workload(data, kernel, stride, padding, out_dtype):
+def _get_workload(data, kernel, stride, padding, dilation, out_dtype):
     """ Get the workload structure. """
     _, in_channel, height, width = [x.value for x in data.shape]
     channel, channel_multiplier, kh, kw = [x.value for x in kernel.shape]
     out_channel = channel * channel_multiplier
     pt, pl, pb, pr = get_pad_tuple(padding, kernel)
+    hdilation, wdilation = dilation if isinstance(dilation, (tuple, list)) else (dilation, dilation)
     if isinstance(stride, (tuple, list)):
         HSTR, WSTR = stride
     else:
@@ -77,6 +80,8 @@ def _get_workload(data, kernel, stride, padding, out_dtype):
         pl,
         pb,
         pr,
+        hdilation,
+        wdilation,
         HSTR,
         WSTR,
     )

@@ -144,7 +144,6 @@ def conv2d_NCHWc_int8(cfg, data, kernel, stride, padding, dilation, layout, out_
     # compute the output shape
     out_height = (in_height - (kernel_h - 1) * dilation_h - 1 + pad_top + pad_down) // stride_h + 1
     out_width = (in_width - (kernel_w - 1) * dilation_w - 1 + pad_left + pad_right) // stride_w + 1
-
     oshape = (batch, oc_chunk, out_height, out_width, oc_block)
 
     icc = te.reduce_axis((0, ic_chunk), name="ic_chunk")

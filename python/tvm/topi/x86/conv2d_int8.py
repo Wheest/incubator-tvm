@@ -33,7 +33,7 @@ from . import conv2d_avx_1x1, conv2d_avx_common
 
 
 def _get_default_config_int8(
-    cfg, data, kernel, strides, padding, out_dtype, is_depthwise=False, layout="NCHW"
+    cfg, data, kernel, strides, padding, dilation, out_dtype, is_depthwise=False, layout="NCHW"
 ):
     """
     Get default schedule config for the workload
@@ -45,7 +45,7 @@ def _get_default_config_int8(
 
         _fallback_schedule(cfg, wkl)
     else:
-        wkl = _get_conv2d_workload(data, kernel, strides, padding, out_dtype, layout)
+        wkl = _get_conv2d_workload(data, kernel, strides, padding, dilation, out_dtype, layout)
         is_kernel_1x1 = wkl.hkernel == 1 and wkl.wkernel == 1
         if is_kernel_1x1:
             conv2d_generic.fallback_schedule_cpu_1x1_int8(
@@ -159,6 +159,7 @@ def conv2d_NCHWc_int8(cfg, data, kernel, strides, padding, dilation, layout, out
             ),
             strides,
             padding,
+            dilation,
             out_dtype,
         )
 
