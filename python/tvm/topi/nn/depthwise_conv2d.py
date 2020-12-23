@@ -57,6 +57,7 @@ def _get_workload(data, kernel, stride, padding, dilation, out_dtype):
     out_channel = channel * channel_multiplier
     pt, pl, pb, pr = get_pad_tuple(padding, kernel)
     hdilation, wdilation = dilation if isinstance(dilation, (tuple, list)) else (dilation, dilation)
+
     if isinstance(stride, (tuple, list)):
         HSTR, WSTR = stride
     else:
