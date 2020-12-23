@@ -44,11 +44,8 @@ Workload = namedtuple(
         "padl",
         "padb",
         "padr",
-<<<<<<< HEAD
         "hdilation",
         "wdilation",
-=======
->>>>>>> 6eefd36b7bb49e8c5476fe7057676d4a3249bee9
         "hstride",
         "wstride",
     ],
