@@ -262,6 +262,7 @@ def conv2d_sparse_strategy(attrs, inputs, out_type, target):
     from envparse import env
     direct_conv = env.bool('TVM_DIRECT_CONV', default=False)
     gemm_conv = env.bool('TVM_GEMM_CONV', default=False)
+    spc_conv = env.bool('TVM_SPC_CONV', default=False)
     if groups == 1:
         if direct_conv:
             if layout == "NCHW":
@@ -280,6 +281,16 @@ def conv2d_sparse_strategy(attrs, inputs, out_type, target):
                 assert kernel_layout == "OIHW"
                 strategy.add_implementation(
                     wrap_compute_conv2d_sparse(topi.nn.conv2d_sparse_gemm_nchw),
+                    wrap_topi_schedule(topi.generic.schedule_conv2d_sparse_nchw),
+                    name="conv2d_sparse.generic")
+            else:
+                raise RuntimeError("Unsupported conv2d layout {}".format(layout))
+        elif spc_conv:
+            print('SPC Conv2d')
+            if layout == "NCHW":
+                assert kernel_layout == "OIHW"
+                strategy.add_implementation(
+                    wrap_compute_conv2d_sparse(topi.nn.conv2d_sparse_spc_nchw),
                     wrap_topi_schedule(topi.generic.schedule_conv2d_sparse_nchw),
                     name="conv2d_sparse.generic")
             else:

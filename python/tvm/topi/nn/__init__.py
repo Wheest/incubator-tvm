@@ -47,4 +47,5 @@ from .fifo_buffer import *
 from .depth_to_space import *
 from .space_to_depth import *
 from .conv2d_sparse import *
+from .conv2d_sparse_spatial_pack import *
 from .conv2d_gemm import *
