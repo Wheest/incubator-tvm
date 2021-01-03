@@ -10,6 +10,112 @@ from ..x86.conv2d import _get_default_config
 from .pad import pad
 from ..nn.conv2d import unpack_NCHWc_to_nchw
 
+
+def csr_spatial_pack_convolution(
+        data, indices, indptr, inputs, oshape, kdim, strides, padding, dtype
+):
+    # pylint: disable=invalid-name
+    """The default implementation of csrdc in topi.
+
+    Parameters
+    ----------
+    data : tvm.te.Tensor
+        1-D with shape [nonzeros]
+
+    indices : tvm.te.Tensor
+        1-D with shape [nonzeros]
+
+    indptr : tvm.te.Tensor
+        1-D with shape [m+1]
+
+    inputs : tvm.te.Tensor
+        4-D with shape [N, IC, IH, IW]
+
+    Returns
+    -------
+    output : tvm.te.Tensor
+        2-D with shape [N, OC, OH, OW]
+    """
+
+    KH, KW = kdim
+    HSTR, WSTR = strides
+    pad_top, pad_left, pad_down, pad_right = padding
+
+    _, ic_chunk, IH, IW, ic_bn = inputs.shape
+
+    def csr_spc_ir(weight_data, indices, indptr, inputs, out):
+        """define ir for csrdc"""
+        irb = tvm.tir.ir_builder.create()
+        weight_data_ptr = irb.buffer_ptr(weight_data)
+        indices_ptr = irb.buffer_ptr(indices)
+        indptr_ptr = irb.buffer_ptr(indptr)
+        inputs_ptr = irb.buffer_ptr(inputs)
+        out_ptr = irb.buffer_ptr(out)
+        batches, oc_chunk, OH, OW, oc_bn = out.shape
+
+
+        with irb.for_range(0, batches, name='n') as n:
+            with irb.for_range(0, oc_chunk, name='ooc_chunk', for_type="parallel") as ooc_chunk:
+                with irb.for_range(0, OH, name='oh') as oh:
+                    with irb.for_range(0, OW, name='ow') as ow:
+                        with irb.for_range(0, oc_bn, name='oc_block') as oc_block:
+                            out_idx = (
+                                n*oc_chunk*OH*OW*oc_bn +
+                                ooc_chunk*OH*OW*oc_bn +
+                                oh*OW*oc_bn +
+                                ow*oc_bn +
+                                oc_block
+                            )
+                            out_ptr[out_idx] = 0.
+
+        with irb.for_range(0, batches, name='n') as n:
+            with irb.for_range(0, oc_chunk, name='ooc_chunk', for_type="parallel") as ooc_chunk:
+                with irb.for_range(0, OH, name='oh') as oh:
+                    with irb.for_range(0, OW, name='ow') as ow:
+                        with irb.for_range(0, oc_bn, name='oc_block') as oc_block:
+                            idx = irb.allocate('int32', (1,), name='idx', scope='local')
+                            tmp = irb.allocate('int32', (1,), name='tmp', scope='local')
+
+                            idx[0] = ooc_chunk + oc_block
+                            tmp[0] = indptr_ptr[idx[0]+1] - indptr_ptr[idx[0]]
+
+                            with irb.for_range(0, tmp[0], name='j') as j:
+                                true_j = irb.allocate('int32', (1,), name='true_j', scope='local')
+                                true_j[0] = j + indptr_ptr[idx[0]]
+                                off = indices_ptr[true_j[0]]
+                                coeff = weight_data_ptr[true_j[0]]
+                                kh = (off % (KH * KW)) // KH
+                                kw = (off % (KH * KW)) % KW
+                                ic = off // (KH * KW)
+                                out_idx = (
+                                    n*oc_chunk*OH*OW*oc_bn +
+                                    ooc_chunk*OH*OW*oc_bn +
+                                    oh*OW*oc_bn +
+                                    ow*oc_bn +
+                                    oc_block
+                                )
+                                data_idx = (
+                                    n*(ic_chunk*IH*IW*ic_bn) +
+                                    (ic // ic_bn)*(IH*IW*ic_bn) +
+                                    (oh * HSTR + kh)*(IW*ic_bn) +
+                                    (ow * WSTR + kw)*ic_bn +
+                                    (ic % ic_bn)
+                                )
+                                out_ptr[out_idx] +=  coeff*inputs_ptr[data_idx]
+
+
+
+
+        print('returning mate')
+        return irb.get()
+
+    out = te.extern(oshape, [data, indices, indptr, inputs],
+                    lambda ins, outs: csr_spc_ir(ins[0], ins[1], ins[2], ins[3], outs[0]),
+                    tag="conv2d_sparse_nchw_spatial_pack", dtype=dtype,
+                    name='conv2d_sparse_nchw_spatial_pack')
+    print('gretting asshole', type(out))
+    return out
+
 def conv2d_sparse_spc_nchw(data, w_data, w_indices, w_indptr,
                            OC, KH, KW, strides, padding, dilation,
                            out_dtype='float32'):
@@ -17,7 +123,8 @@ def conv2d_sparse_spc_nchw(data, w_data, w_indices, w_indptr,
                                   OC, KH, KW, strides, padding, dilation,
                                   out_dtype)
 
-@autotvm.register_topi_compute("conv2d.nn")
+
+# @autotvm.register_topi_compute("conv2d.nn")
 def conv2d_sparse_sp_NCHW(cfg, data, w_data, w_indices, w_indptr,
                           OC, KH, KW,
                           stride, padding, dilation,
@@ -64,6 +171,15 @@ def conv2d_sparse_sp_NCHW(cfg, data, w_data, w_indices, w_indptr,
         )
     ic_bn, oc_bn = cfg["tile_ic"].size[-1], cfg["tile_oc"].size[-1]
     # dshape = (n, in_channel // cfg["tile_ic"].size[-1], ih, iw, cfg["tile_ic"].size[-1])
+
+
+
+    HSTR, WSTR = stride if isinstance(stride, (tuple, list)) else (stride, stride)
+    dilation_h, dilation_w = (
+        dilation if isinstance(dilation, (tuple, list)) else (dilation, dilation)
+    )
+
+    # reshape data
     dshape = (n, in_channel // cfg["tile_ic"].size[-1], ih, iw, cfg["tile_ic"].size[-1])
 
     data = te.compute(
@@ -71,6 +187,27 @@ def conv2d_sparse_sp_NCHW(cfg, data, w_data, w_indices, w_indptr,
         lambda bs, c, h, w, vc: data[bs, c * ic_bn + vc, h, w],
         name="data_vec",
     )
+
+
+    dilated_kernel_h = (kernel_height - 1) * dilation_h + 1
+    dilated_kernel_w = (kernel_width - 1) * dilation_w + 1
+
+    # pad data
+    pad_top, pad_left, pad_down, pad_right = get_pad_tuple(
+        padding, (dilated_kernel_h, dilated_kernel_w)
+    )
+    HPAD = pad_top + pad_down
+    WPAD = pad_left + pad_right
+    pad_before = (0, 0, pad_top, pad_left, 0)
+    pad_after = (0, 0, pad_down, pad_right, 0)
+
+    # DOPAD
+    DOPAD = HPAD != 0 or WPAD != 0
+    if DOPAD:
+        data_pad = pad(data, pad_before, pad_after, name="data_pad")
+    else:
+        data_pad = data
+
     kshape = (
         num_filter // cfg["tile_oc"].size[-1],
         in_channel // cfg["tile_ic"].size[-1],
@@ -79,15 +216,6 @@ def conv2d_sparse_sp_NCHW(cfg, data, w_data, w_indices, w_indptr,
         cfg["tile_ic"].size[-1],
         cfg["tile_oc"].size[-1],
     )
-    # kernel = tvm.te.placeholder(kshape, kernel.dtype, name="kernel")
-    #
-    #    # layout and out_layout are not used here,
-    # we keep them for debug convenience when dumping autotvm workload
-    HSTR, WSTR = stride if isinstance(stride, (tuple, list)) else (stride, stride)
-    dilation_h, dilation_w = (
-        dilation if isinstance(dilation, (tuple, list)) else (dilation, dilation)
-    )
-
     # n, ic_chunk, ih, iw, ic_bn = get_const_tuple(data.shape)
     ic_chunk = in_channel // cfg["tile_ic"].size[-1]
 
@@ -97,29 +225,11 @@ def conv2d_sparse_sp_NCHW(cfg, data, w_data, w_indices, w_indptr,
     num_filter = oc_chunk * oc_bn
     groups = ic_chunk // ic_chunk_group
 
-    dilated_kernel_h = (kernel_height - 1) * dilation_h + 1
-    dilated_kernel_w = (kernel_width - 1) * dilation_w + 1
-
-    pad_top, pad_left, pad_down, pad_right = get_pad_tuple(
-        padding, (dilated_kernel_h, dilated_kernel_w)
-    )
-    HPAD = pad_top + pad_down
-    WPAD = pad_left + pad_right
-
     # output shape
     out_height = (ih + HPAD - dilated_kernel_h) // HSTR + 1
     out_width = (iw + WPAD - dilated_kernel_w) // WSTR + 1
     # n, ic_chunk, ih, iw, ic_bn = get_const_tuple(data.shape)
     oshape = (n, oc_chunk, out_height, out_width, oc_bn)
-    pad_before = (0, 0, pad_top, pad_left, 0)
-    pad_after = (0, 0, pad_down, pad_right, 0)
-
-    # DOPAD
-    DOPAD = HPAD != 0 or WPAD != 0
-    # if DOPAD:
-    #     data_pad = pad(data, pad_before, pad_after, name="data_pad")
-    # else:
-    data_pad = data
 
     print('hello friend')
     print(data_pad.shape)
@@ -141,25 +251,29 @@ def conv2d_sparse_sp_NCHW(cfg, data, w_data, w_indices, w_indptr,
     idxdiv = tvm.tir.indexdiv
     idxmod = tvm.tir.indexmod
 
-    conv = te.compute(
-        oshape,
-        lambda n, oc_chunk, oh, ow, oc_block: te.sum(
-            data_pad[
-                n,
-                idxdiv(ic, ic_bn),
-                oh * HSTR + kh * dilation_h,
-                ow * WSTR + kw * dilation_w,
-                idxmod(ic, ic_bn),
-            ].astype(out_dtype)
-            * 2,
-            axis=[ic, kh, kw],
-        ),
-        name="conv2d_NCHWc",
-        tag="conv2d_NCHWc",
+    # conv = te.compute(
+    #     oshape,
+    #     lambda n, oc_chunk, oh, ow, oc_block: te.sum(
+    #         data_pad[
+    #             n,
+    #             idxdiv(ic, ic_bn),
+    #             oh * HSTR + kh * dilation_h,
+    #             ow * WSTR + kw * dilation_w,
+    #             idxmod(ic, ic_bn),
+    #         ].astype(out_dtype)
+    #         * 2,
+    #         axis=[ic, kh, kw],
+    #     ),
+    #     name="conv2d_NCHWc",
+    #     tag="conv2d_NCHWc",
+    # )
+    print('smoking weed, breaking hearts')
+    print(w_data, w_indices, w_indptr)
+    conv = csr_spatial_pack_convolution(
+        w_data, w_indices, w_indptr, data_pad, oshape, (KH,KW), (HSTR,WSTR), padding, out_dtype
     )
-
-
     oshape = (n, OC, out_height, out_width)
+
     return unpack_NCHWc_to_nchw(conv, out_dtype)
     # return te.compute(
     #     oshape,

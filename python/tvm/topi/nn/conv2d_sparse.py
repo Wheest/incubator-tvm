@@ -185,7 +185,7 @@ def conv2d_sparse_direct_nchw(data, w_data, w_indices, w_indptr,
                                      out_dtype)
 
 
-#@autotvm.register_topi_compute("conv2d.nn")
+@autotvm.register_topi_compute("conv2d.nn")
 def conv2d_sparse_direct_NCHW(cfg, data, w_data, w_indices, w_indptr,
                               OC, KH, KW,
                               strides, padding, dilation,
