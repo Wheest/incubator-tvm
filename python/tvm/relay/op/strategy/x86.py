@@ -30,6 +30,7 @@ logger = logging.getLogger("strategy")
 
 _NCHWc_matcher = re.compile("^NCHW[0-9]+c$")
 _OIHWio_matcher = re.compile("^OIHW[0-9]+i[0-9]+o$")
+_GOIHWio_matcher = re.compile("^GOIHW[0-9]+i[0-9]+o$")
 
 
 @schedule_injective.register("cpu")
@@ -204,7 +205,7 @@ def conv2d_strategy_cpu(attrs, inputs, out_type, target):
             raise RuntimeError("Unsupported depthwise_conv2d layout {}".format(layout))
     else:  # group_conv2d
         if layout == "NCHW":
-            assert kernel_layout == "OIHW"
+            assert kernel_layout == "OIHW" or  _GOIHWio_matcher.match(kernel_layout)  # check if kernel is OIHWio
             strategy.add_implementation(
                 wrap_compute_conv2d(topi.x86.group_conv2d_nchw, has_groups=True),
                 wrap_topi_schedule(topi.x86.schedule_group_conv2d_nchw),

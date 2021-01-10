@@ -262,6 +262,63 @@ def _alter_conv2d_layout(attrs, inputs, tinfos, out_type):
             assert _OIHWio_matcher.match(kernel_layout)
         return relay.nn.contrib_depthwise_conv2d_nchwc(*inputs, **new_attrs)
 
+
+
+    if topi_tmpl == "group_conv2d_nchw.x86":
+        if data_layout == "NCHW" and kernel_layout == "OIHW":
+            if cfg.is_fallback:
+                _get_default_config(
+                    cfg,
+                    data_tensor,
+                    kernel_tensor,
+                    strides,
+                    padding,
+                    dilation,
+                    out_dtype,
+                    False,
+                    data_layout,
+                )
+            batch_size, in_channel, height, width = get_const_tuple(data_tensor.shape)
+            out_channel, kernel_depth, kh, kw = get_const_tuple(kernel_tensor.shape)
+            ic_bn, oc_bn = cfg["tile_ic"].size[-1], cfg["tile_oc"].size[-1]
+            groups = attrs["groups"]
+            kernels_per_group = out_channel // groups
+
+            # update new attrs
+            new_attrs["channels"] = out_channel
+            new_attrs["kernel_layout"] = "GOIHW%di%do" % (ic_bn, oc_bn)
+            new_attrs["out_layout"] = "NCHW"
+
+            # Store altered operator's config
+            new_data = data_tensor
+            new_kernel = te.placeholder(
+                (
+                    groups,
+                    kernels_per_group // oc_bn,
+                    kernel_depth // ic_bn,
+                    kh,
+                    kw,
+                    ic_bn,
+                    oc_bn,
+                ),
+                dtype=kernel_tensor.dtype,
+            )
+            new_workload = autotvm.task.args_to_workload(
+                [
+                    new_data,
+                    new_kernel,
+                    strides,
+                    padding,
+                    dilation,
+                    new_attrs["data_layout"],
+                    new_attrs["out_layout"],
+                    out_dtype,
+                ],
+                topi_tmpl,
+            )
+            dispatch_ctx.update(target, new_workload, cfg)
+            return relay.nn.conv2d(*inputs, **new_attrs)
+
     return None
 
 

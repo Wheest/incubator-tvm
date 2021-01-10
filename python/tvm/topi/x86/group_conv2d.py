@@ -131,7 +131,14 @@ def group_conv2d_nchw_spatial_pack(
         stride_h, stride_w = strides
 
     batch_size, in_channel, in_height, in_width = get_const_tuple(data.shape)
-    out_channel, kernel_depth, k_height, k_width = get_const_tuple(kernel.shape)
+
+    if len(kernel.shape) == 4:
+        pre_packed = False
+        out_channel, kernel_depth, k_height, k_width = get_const_tuple(kernel.shape)
+    else:  # kernel tensor is pre packed
+        pre_packed = True
+        _, _, _, k_height, k_width, ic_bn, oc_bn, = get_const_tuple(kernel.shape)
+        kernel_depth = in_channel // groups
 
     pad_height = in_height + pad_top + pad_bottom
     pad_width = in_width + pad_left + pad_right
@@ -183,23 +190,26 @@ def group_conv2d_nchw_spatial_pack(
     )
 
     # pack kernel
-    shape = (
-        groups,
-        kernels_per_group // oc_bn,
-        kernel_depth // ic_bn,
-        k_height,
-        k_width,
-        ic_bn,
-        oc_bn,
-    )
+    if not pre_packed:
+        shape = (
+            groups,
+            kernels_per_group // oc_bn,
+            kernel_depth // ic_bn,
+            k_height,
+            k_width,
+            ic_bn,
+            oc_bn,
+        )
 
-    kernel_vec = te.compute(
-        shape,
-        lambda g, out_channel, in_channel, h, w, ci, co: kernel[
-            (out_channel * oc_bn + co + g * kernels_per_group), in_channel * ic_bn + ci, h, w
-        ],
-        name="kernel_vec",
-    )
+        kernel_vec = te.compute(
+            shape,
+            lambda g, out_channel, in_channel, h, w, ci, co: kernel[
+                (out_channel * oc_bn + co + g * kernels_per_group), in_channel * ic_bn + ci, h, w
+            ],
+            name="kernel_vec",
+        )
+    else:
+        kernel_vec = kernel
 
     # convolution
     oshape = (groups, batch_size, kernels_per_group // oc_bn, out_height, out_width, oc_bn)
