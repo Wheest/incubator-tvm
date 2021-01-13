@@ -103,17 +103,12 @@ def csr_spatial_pack_convolution(
                                 )
                                 out_ptr[out_idx] +=  coeff*inputs_ptr[data_idx]
 
-
-
-
-        print('returning mate')
         return irb.get()
 
     out = te.extern(oshape, [data, indices, indptr, inputs],
                     lambda ins, outs: csr_spc_ir(ins[0], ins[1], ins[2], ins[3], outs[0]),
                     tag="conv2d_sparse_nchw_spatial_pack", dtype=dtype,
                     name='conv2d_sparse_nchw_spatial_pack')
-    print('gretting asshole', type(out))
     return out
 
 def conv2d_sparse_spc_nchw(data, w_data, w_indices, w_indptr,
@@ -130,16 +125,10 @@ def conv2d_sparse_sp_NCHW(cfg, data, w_data, w_indices, w_indptr,
                           stride, padding, dilation,
                           out_dtype='float32'):
     n, in_channel, ih, iw = get_const_tuple(data.shape)
-    print('sparse sp')
-    print(data.shape)
 
     # Define autotvm tuning space
     kernel_height, kernel_width = KH, KW
     num_filter = OC.__int__()
-
-    print('hello')
-    print(type(cfg))
-    print(type(OC.__int__()), type(KH), type(KW),)
 
     is_kernel_1x1 = kernel_height == 1 and kernel_width == 1
     pt, pl, pb, pr = get_pad_tuple(padding, (kernel_height, kernel_width))
@@ -231,7 +220,6 @@ def conv2d_sparse_sp_NCHW(cfg, data, w_data, w_indices, w_indptr,
     # n, ic_chunk, ih, iw, ic_bn = get_const_tuple(data.shape)
     oshape = (n, oc_chunk, out_height, out_width, oc_bn)
 
-    print('hello friend')
     print(data_pad.shape)
     print(oshape)
     # data = te.compute(
@@ -267,8 +255,6 @@ def conv2d_sparse_sp_NCHW(cfg, data, w_data, w_indices, w_indptr,
     #     name="conv2d_NCHWc",
     #     tag="conv2d_NCHWc",
     # )
-    print('smoking weed, breaking hearts')
-    print(w_data, w_indices, w_indptr)
     conv = csr_spatial_pack_convolution(
         w_data, w_indices, w_indptr, data_pad, oshape, (KH,KW), (HSTR,WSTR), padding, out_dtype
     )

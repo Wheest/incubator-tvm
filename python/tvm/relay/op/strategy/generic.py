@@ -271,7 +271,7 @@ def conv2d_sparse_strategy(attrs, inputs, out_type, target):
                 strategy.add_implementation(
                     wrap_compute_conv2d_sparse(topi.nn.conv2d_sparse_direct_nchw),
                     # wrap_topi_schedule(topi.generic.schedule_conv2d_sparse_nchw),
-                    wrap_topi_schedule(topi.nn.schedule_conv2d_direct_sparse_nchw),
+                    wrap_topi_schedule(topi.nn.schedule_conv2d_sparse_nchw),
                     name="conv2d_sparse.generic")
             else:
                 raise RuntimeError("Unsupported conv2d layout {}".format(layout))

@@ -117,14 +117,14 @@ def conv2d_strategy_cpu(attrs, inputs, out_type, target):
                 strategy.add_implementation(
                     wrap_compute_conv2d(topi.x86.conv2d_nchw_direct),
                     # wrap_topi_schedule(topi.generic.schedule_conv2d_nchw),
-                    wrap_topi_schedule(topi.x86.schedule_conv2d_nchw_direct),
+                    wrap_topi_schedule(topi.x86.schedule_conv2d_nchw),
                     name="conv2d_nchw.x86")
             elif gemm_conv:
                 print('using GEMM convolution')
                 assert kernel_layout == "OIHW"
                 strategy.add_implementation(
                     wrap_compute_conv2d(topi.nn.conv2d_gemm_nchw),
-                    wrap_topi_schedule(topi.nn.schedule_gemm_conv2d_nchw),
+                    wrap_topi_schedule(topi.nn.schedule_conv2d_nchw),
                     name="conv2d_nchw.x86")
             else:
                 print('using spatial pack convolution')
