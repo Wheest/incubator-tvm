@@ -258,54 +258,16 @@ def conv2d_sparse_strategy(attrs, inputs, out_type, target):
     if dilation_h < 1 or dilation_w < 1:
         raise ValueError("dilation should be positive value")
 
-    print(f'using sparse conv2d groups:{groups}')
-    from envparse import env
-    direct_conv = env.bool('TVM_DIRECT_CONV', default=False)
-    gemm_conv = env.bool('TVM_GEMM_CONV', default=False)
-    spc_conv = env.bool('TVM_SPC_CONV', default=False)
-    if groups == 1:
-        if direct_conv:
-            if layout == "NCHW":
-                print('Running my sparse system')
-                assert kernel_layout == "OIHW"
-                strategy.add_implementation(
-                    wrap_compute_conv2d_sparse(topi.nn.conv2d_sparse_direct_nchw),
-                    # wrap_topi_schedule(topi.generic.schedule_conv2d_sparse_nchw),
-                    wrap_topi_schedule(topi.nn.schedule_conv2d_sparse_nchw),
-                    name="conv2d_sparse.generic")
-            else:
-                raise RuntimeError("Unsupported conv2d layout {}".format(layout))
-        elif gemm_conv:
-            print('Sparse GEMM Conv2d')
-            if layout == "NCHW":
-                assert kernel_layout == "OIHW"
-                strategy.add_implementation(
-                    wrap_compute_conv2d_sparse(topi.nn.conv2d_sparse_gemm_nchw),
-                    wrap_topi_schedule(topi.generic.schedule_conv2d_sparse_nchw),
-                    name="conv2d_sparse.generic")
-            else:
-                raise RuntimeError("Unsupported conv2d layout {}".format(layout))
-        elif spc_conv:
-            print('SPC Conv2d')
-            if layout == "NCHW":
-                assert kernel_layout == "OIHW"
-                strategy.add_implementation(
-                    wrap_compute_conv2d_sparse(topi.nn.conv2d_sparse_spc_nchw),
-                    wrap_topi_schedule(topi.generic.schedule_conv2d_sparse_nchw),
-                    name="conv2d_sparse.generic")
-            else:
-                raise RuntimeError("Unsupported conv2d layout {}".format(layout))
-    elif groups > 1:
-        print('Sparse depthwise')
-        if layout == "NCHW":
-            assert kernel_layout == "OIHW"
-            strategy.add_implementation(
-                wrap_compute_conv2d_sparse(topi.nn.conv2d_sparse_nchw),
-                wrap_topi_schedule(topi.generic.schedule_conv2d_sparse_nchw),
-                name="conv2d_sparse.generic")
-        else:
-            raise RuntimeError("Unsupported conv2d layout {}".format(layout))
 
+    if layout == "NCHW":
+        assert kernel_layout == "OIHW"
+        strategy.add_implementation(
+            wrap_compute_conv2d_sparse(topi.nn.conv2d_sparse_direct_nchw),
+            # wrap_topi_schedule(topi.generic.schedule_conv2d_sparse_nchw),
+            wrap_topi_schedule(topi.nn.schedule_conv2d_sparse_nchw),
+            name="conv2d_sparse.generic")
+    else:
+        raise RuntimeError("Unsupported conv2d layout {}".format(layout))
     return strategy
 
 
