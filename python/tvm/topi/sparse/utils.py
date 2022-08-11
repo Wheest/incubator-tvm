@@ -206,12 +206,46 @@ def sparse_sketch_rules():
 def sparse_conv2d_meet_condition_func(search_policy, state, stage_id):
     state = auto_scheduler.loop_state.State(state, search_policy.search_task.compute_dag)
     if state.stages[stage_id].op.tag in [
+        "sparse_direct_conv2d",
         "sparse_conv2d_sp_bsrmm",
         "sparse_conv2d_sp_bsrmm_block",
     ]:
         return auto_scheduler.PreloadCustomSketchRule.APPLY_AND_SKIP_REST
     return auto_scheduler.PreloadCustomSketchRule.PASS
 
+
+def sparse_conv2d_direct_apply_func(search_policy, state, stage_id):
+    print("trying sparse sketch apply")
+    ret = []
+    s_0 = auto_scheduler.loop_state.State(state, search_policy.search_task.compute_dag)
+    # #if s_0.stages[stage_id].op.tag == "sparse_conv2d_sp_bsrmm_block":
+    # return [s_0.state_object, stage_id - 1]
+    sparse_conv2d = s_0.stages[stage_id].op
+    layout = sparse_conv2d.attrs["layout"]
+    if layout != "NCHW":
+        raise ValueError("only NCHW supported in this version")
+    # Set the default consumer of compute block
+    consumer = sparse_conv2d
+
+    # If sparse conv2d has a single elementwise consumer
+    # We can compute inline the sparse_conv2d output stage
+    consumers = _ffi_api.SearchPolicyUtilsGetConsumers(
+        search_policy.search_task, s_0.state_object, stage_id
+    )
+    if len(consumers) == 1:
+        consumer_id = int(consumers.items()[0][0])
+        if _ffi_api.SearchPolicyUtilsIsElementwiseMatch(
+            search_policy.search_task, s_0.state_object, stage_id, consumer_id
+        ):
+            consumer = s_0.stages[consumer_id].op
+            s_0.compute_inline(sparse_conv2d)
+
+    if len(s_0[sparse_conv2d].iters) == 5:
+        i, oc, oh, ow, row_offset = s_0[  # pylint: disable=invalid-name
+            sparse_conv2d
+        ].iters
+    ret.append([s_0.state_object, stage_id - 2])
+    return ret
 
 def sparse_conv2d_apply_func(search_policy, state, stage_id):
     """Describe how to generate the initial sketch for sparse conv2d"""
@@ -221,6 +255,9 @@ def sparse_conv2d_apply_func(search_policy, state, stage_id):
         return [s_0.state_object, stage_id - 1]
 
     sparse_conv2d = s_0.stages[stage_id].op
+    if sparse_conv2d.tag == "sparse_direct_conv2d":
+        return sparse_conv2d_direct_apply_func(search_policy, state, stage_id)
+
     sparse_conv2d_block = s_0.stages[stage_id - 1].op
     assert sparse_conv2d.tag == "sparse_conv2d_sp_bsrmm"
     assert sparse_conv2d_block.tag == "sparse_conv2d_sp_bsrmm_block"
