@@ -155,7 +155,11 @@ reg.register_pattern("nn.batch_matmul", reg.OpPattern.OUT_ELEMWISE_FUSABLE)
 @reg.register_compute("nn.sparse_dense")
 def compute_sparse_dense(attrs, inputs, out_type):
     """Compute definition of sparse_dense"""
-    return [topi.nn.sparse_dense(inputs[0], inputs[1], inputs[2], inputs[3], attrs["sparse_lhs"])]
+    return [
+        topi.nn.sparse_dense(
+            inputs[0], inputs[1], inputs[2], inputs[3], attrs["sparse_lhs"]
+        )
+    ]
 
 
 reg.register_strategy("nn.sparse_dense", strategy.sparse_dense_strategy)
@@ -176,11 +180,17 @@ reg.register_pattern("nn.sparse_add", reg.OpPattern.OPAQUE)
 @reg.register_compute("nn.internal.sparse_dense_padded")
 def compute_sparse_dense_padded(attrs, inputs, out_type):
     """Compute definition of sparse_dense_padded"""
-    raise NotImplementedError("nn.internal.sparse_dense_padded is only available on cuda")
+    raise NotImplementedError(
+        "nn.internal.sparse_dense_padded is only available on cuda"
+    )
 
 
-reg.register_strategy("nn.internal.sparse_dense_padded", strategy.sparse_dense_padded_strategy)
-reg.register_pattern("nn.internal.sparse_dense_padded", reg.OpPattern.OUT_ELEMWISE_FUSABLE)
+reg.register_strategy(
+    "nn.internal.sparse_dense_padded", strategy.sparse_dense_padded_strategy
+)
+reg.register_pattern(
+    "nn.internal.sparse_dense_padded", reg.OpPattern.OUT_ELEMWISE_FUSABLE
+)
 
 
 # sparse_transpose
@@ -200,7 +210,15 @@ def compute_sparse_conv2d(attrs, inputs, out_type):
     """Compute definition of sparse_conv2d"""
     return [
         topi.nn.sparse_conv2d(
-            inputs[0], inputs[1], inputs[2], inputs[3], attrs["layout"], attrs["kernel_size"]
+            inputs[0],
+            inputs[1],
+            inputs[2],
+            inputs[3],
+            attrs["layout"],
+            attrs["kernel_size"],
+            attrs["padding"],
+            attrs["strides"],
+            attrs["dilation"],
         )
     ]
 
@@ -279,7 +297,9 @@ def convert_conv2d(attrs, inputs, tinfos, desired_layouts):
 
     # Prepare new layout.
     new_attrs = dict(attrs)
-    assert len(desired_layouts) == 2, "A desired layout is expected for both of nn.conv2d's inputs"
+    assert (
+        len(desired_layouts) == 2
+    ), "A desired layout is expected for both of nn.conv2d's inputs"
     desired_data_layout, desired_kernel_layout = map(str, desired_layouts)
     assert desired_data_layout != "default", "Data layout cannot be default"
     new_attrs["data_layout"] = desired_data_layout
@@ -362,7 +382,9 @@ def convert_conv2d_transpose(attrs, inputs, tinfos, desired_layouts):
     """
     data, weight = inputs
     new_attrs = dict(attrs)
-    assert len(desired_layouts) == 2, "A desired layout is expected for both of nn.conv2d's inputs"
+    assert (
+        len(desired_layouts) == 2
+    ), "A desired layout is expected for both of nn.conv2d's inputs"
     desired_data_layout, desired_kernel_layout = map(str, desired_layouts)
     assert desired_data_layout != "default", "Data layout cannot be default"
     new_attrs["data_layout"] = desired_data_layout
@@ -442,7 +464,9 @@ def convert_conv3d(attrs, inputs, tinfos, desired_layouts):
     """
     data, weight = inputs
     new_attrs = dict(attrs)
-    assert len(desired_layouts) == 2, "A desired layout is expected for both of nn.conv3d's inputs"
+    assert (
+        len(desired_layouts) == 2
+    ), "A desired layout is expected for both of nn.conv3d's inputs"
     desired_data_layout, desired_kernel_layout = map(str, desired_layouts)
     assert desired_data_layout != "default", "Data layout cannot be default"
     new_attrs["data_layout"] = desired_data_layout
@@ -468,14 +492,17 @@ reg.register_strategy(
     strategy.conv3d_winograd_without_weight_transfrom_strategy,
 )
 reg.register_pattern(
-    "nn.contrib_conv3d_winograd_without_weight_transform", OpPattern.OUT_ELEMWISE_FUSABLE
+    "nn.contrib_conv3d_winograd_without_weight_transform",
+    OpPattern.OUT_ELEMWISE_FUSABLE,
 )
 
 
 @reg.register_compute("nn.contrib_conv3d_winograd_weight_transform")
 def compute_contrib_conv3d_winograd_weight_transform(attrs, inputs, out_dtype):
     """Compute definition of contrib_conv3d_winograd_weight_transform"""
-    out = topi.nn.conv3d_winograd_weight_transform(inputs[0], attrs.get_int("tile_size"))
+    out = topi.nn.conv3d_winograd_weight_transform(
+        inputs[0], attrs.get_int("tile_size")
+    )
     return [out]
 
 
@@ -483,7 +510,9 @@ reg.register_schedule(
     "nn.contrib_conv3d_winograd_weight_transform",
     strategy.schedule_conv3d_winograd_weight_transform,
 )
-reg.register_pattern("nn.contrib_conv3d_winograd_weight_transform", OpPattern.OUT_ELEMWISE_FUSABLE)
+reg.register_pattern(
+    "nn.contrib_conv3d_winograd_weight_transform", OpPattern.OUT_ELEMWISE_FUSABLE
+)
 
 
 # conv1d_transpose
@@ -692,7 +721,11 @@ reg.register_pattern("nn.batch_flatten", OpPattern.INJECTIVE)
 def compute_lrn(attrs, inputs, out_dtype):
     """Compute definition of lrn"""
     assert len(inputs) == 1
-    return [topi.nn.lrn(inputs[0], attrs.size, attrs.axis, attrs.alpha, attrs.beta, attrs.bias)]
+    return [
+        topi.nn.lrn(
+            inputs[0], attrs.size, attrs.axis, attrs.alpha, attrs.beta, attrs.bias
+        )
+    ]
 
 
 reg.register_schedule("nn.lrn", strategy.schedule_lrn)
@@ -707,7 +740,9 @@ def compute_upsampling(attrs, inputs, out_dtype):
     layout = attrs.layout
     method = attrs.method
     align_corners = attrs.align_corners
-    return [topi.nn.upsampling(inputs[0], scale_h, scale_w, layout, method, align_corners)]
+    return [
+        topi.nn.upsampling(inputs[0], scale_h, scale_w, layout, method, align_corners)
+    ]
 
 
 reg.register_injective_schedule("nn.upsampling")
@@ -724,7 +759,13 @@ def compute_upsampling3d(attrs, inputs, out_dtype):
     coordinate_transformation_mode = attrs.coordinate_transformation_mode
     return [
         topi.nn.upsampling3d(
-            inputs[0], scale_d, scale_h, scale_w, layout, method, coordinate_transformation_mode
+            inputs[0],
+            scale_d,
+            scale_h,
+            scale_w,
+            layout,
+            method,
+            coordinate_transformation_mode,
         )
     ]
 
@@ -741,7 +782,9 @@ reg.register_broadcast_schedule("nn.pad")
 def compute_mirror_pad(attrs, inputs, out_dtype):
     pad_before, pad_after = list(zip(*attrs.pad_width))
     mode = attrs.mode
-    out = topi.nn.mirror_pad(inputs[0], pad_before=pad_before, pad_after=pad_after, mode=mode)
+    out = topi.nn.mirror_pad(
+        inputs[0], pad_before=pad_before, pad_after=pad_after, mode=mode
+    )
     return [out]
 
 
@@ -768,7 +811,8 @@ reg.register_strategy(
     strategy.conv2d_winograd_without_weight_transfrom_strategy,
 )
 reg.register_pattern(
-    "nn.contrib_conv2d_winograd_without_weight_transform", OpPattern.OUT_ELEMWISE_FUSABLE
+    "nn.contrib_conv2d_winograd_without_weight_transform",
+    OpPattern.OUT_ELEMWISE_FUSABLE,
 )
 
 # conv2d_gemm related operators
@@ -784,20 +828,27 @@ reg.register_pattern(
 @reg.register_compute("nn.contrib_conv2d_gemm_weight_transform")
 def compute_contrib_conv2d_gemm_weight_transform(attrs, inputs, out_dtype):
     """Compute definition of contrib_conv2d_gemm_weight_transform"""
-    out = topi.nn.conv2d_gemm_weight_transform(inputs[0], attrs.tile_rows, attrs.tile_cols)
+    out = topi.nn.conv2d_gemm_weight_transform(
+        inputs[0], attrs.tile_rows, attrs.tile_cols
+    )
     return [out]
 
 
 reg.register_schedule(
-    "nn.contrib_conv2d_gemm_weight_transform", strategy.schedule_conv2d_gemm_weight_transform
+    "nn.contrib_conv2d_gemm_weight_transform",
+    strategy.schedule_conv2d_gemm_weight_transform,
 )
-reg.register_pattern("nn.contrib_conv2d_gemm_weight_transform", OpPattern.OUT_ELEMWISE_FUSABLE)
+reg.register_pattern(
+    "nn.contrib_conv2d_gemm_weight_transform", OpPattern.OUT_ELEMWISE_FUSABLE
+)
 
 
 @reg.register_compute("nn.contrib_conv2d_winograd_weight_transform")
 def compute_contrib_conv2d_winograd_weight_transform(attrs, inputs, out_dtype):
     """Compute definition of contrib_conv2d_winograd_weight_transform"""
-    out = topi.nn.conv2d_winograd_weight_transform(inputs[0], attrs.get_int("tile_size"))
+    out = topi.nn.conv2d_winograd_weight_transform(
+        inputs[0], attrs.get_int("tile_size")
+    )
     return [out]
 
 
@@ -805,7 +856,9 @@ reg.register_schedule(
     "nn.contrib_conv2d_winograd_weight_transform",
     strategy.schedule_conv2d_winograd_weight_transform,
 )
-reg.register_pattern("nn.contrib_conv2d_winograd_weight_transform", OpPattern.OUT_ELEMWISE_FUSABLE)
+reg.register_pattern(
+    "nn.contrib_conv2d_winograd_weight_transform", OpPattern.OUT_ELEMWISE_FUSABLE
+)
 
 
 @reg.register_compute("nn.contrib_conv2d_winograd_nnpack_weight_transform")
@@ -822,7 +875,9 @@ reg.register_schedule(
     "nn.contrib_conv2d_winograd_nnpack_weight_transform",
     strategy.schedule_conv2d_winograd_nnpack_weight_transform,
 )
-reg.register_pattern("nn.contrib_conv2d_winograd_nnpack_weight_transform", OpPattern.OPAQUE)
+reg.register_pattern(
+    "nn.contrib_conv2d_winograd_nnpack_weight_transform", OpPattern.OPAQUE
+)
 
 
 # conv2d_NCHWc
@@ -830,8 +885,12 @@ reg.register_strategy("nn.contrib_conv2d_NCHWc", strategy.conv2d_NCHWc_strategy)
 reg.register_pattern("nn.contrib_conv2d_NCHWc", OpPattern.OUT_ELEMWISE_FUSABLE)
 
 # depthwise_conv2d_NCHWc
-reg.register_strategy("nn.contrib_depthwise_conv2d_NCHWc", strategy.depthwise_conv2d_NCHWc_strategy)
-reg.register_pattern("nn.contrib_depthwise_conv2d_NCHWc", OpPattern.OUT_ELEMWISE_FUSABLE)
+reg.register_strategy(
+    "nn.contrib_depthwise_conv2d_NCHWc", strategy.depthwise_conv2d_NCHWc_strategy
+)
+reg.register_pattern(
+    "nn.contrib_depthwise_conv2d_NCHWc", OpPattern.OUT_ELEMWISE_FUSABLE
+)
 
 
 # deformable_conv2d
@@ -1004,7 +1063,11 @@ reg.register_pattern("nn.cross_entropy_with_logits", OpPattern.OPAQUE)
 @reg.register_compute("nn.nll_loss")
 def compute_nll_loss(attrs, inputs, out_dtype):
     predictions, targets, weights = inputs
-    return [topi.nn.nll_loss(predictions, targets, weights, attrs.reduction, attrs.ignore_index)]
+    return [
+        topi.nn.nll_loss(
+            predictions, targets, weights, attrs.reduction, attrs.ignore_index
+        )
+    ]
 
 
 reg.register_reduce_schedule("nn.nll_loss")
@@ -1109,7 +1172,11 @@ def conv_shape_func(attrs, inputs, _):
             % (attrs["data_layout"], attrs["kernel_layout"])
         )
 
-    return [shape_func(inputs[0], inputs[1], convert(strides), convert(padding), convert(dilation))]
+    return [
+        shape_func(
+            inputs[0], inputs[1], convert(strides), convert(padding), convert(dilation)
+        )
+    ]
 
 
 reg.register_shape_func("nn.conv1d", False, conv_shape_func)
@@ -1170,7 +1237,9 @@ def conv2d_NCHWc_shape_func(attrs, inputs, _):
 
 
 @script
-def _conv_transpose_shape_func(dshape, kshape, strides, padding, dilation, output_padding):
+def _conv_transpose_shape_func(
+    dshape, kshape, strides, padding, dilation, output_padding
+):
     out = output_tensor((dshape.shape[0],), "int64")
     out[0] = dshape[0]
     out[1] = kshape[1]
@@ -1178,7 +1247,10 @@ def _conv_transpose_shape_func(dshape, kshape, strides, padding, dilation, outpu
     for i in const_range(dshape.shape[0] - 2):
         dilated_k = (kshape[i + 2] - 1) * dilation[i] + 1
         out[i + 2] = (
-            strides[i] * (dshape[i + 2] - 1) + dilated_k - 2 * padding[i] + output_padding[i]
+            strides[i] * (dshape[i + 2] - 1)
+            + dilated_k
+            - 2 * padding[i]
+            + output_padding[i]
         )
     return out
 
@@ -1209,13 +1281,19 @@ reg.register_shape_func("nn.conv2d_transpose", False, conv_transpose_shape_func)
 
 
 @script
-def _pool2d_shape_func(data_shape, pool_size, strides, padding, height_axis, width_axis):
+def _pool2d_shape_func(
+    data_shape, pool_size, strides, padding, height_axis, width_axis
+):
     out = output_tensor((data_shape.shape[0],), "int64")
     for i in const_range(data_shape.shape[0]):
         if i == height_axis:
-            out[i] = (data_shape[i] + padding[0] + padding[2] - pool_size[0]) // strides[0] + 1
+            out[i] = (
+                data_shape[i] + padding[0] + padding[2] - pool_size[0]
+            ) // strides[0] + 1
         elif i == width_axis:
-            out[i] = (data_shape[i] + padding[1] + padding[3] - pool_size[1]) // strides[1] + 1
+            out[i] = (
+                data_shape[i] + padding[1] + padding[3] - pool_size[1]
+            ) // strides[1] + 1
         else:
             out[i] = data_shape[i]
 
@@ -1276,7 +1354,9 @@ def global_pool2d_shape_func(attrs, inputs, _):
             height_axis = i
         if letter == "W":
             width_axis = i
-    return [_global_pool2d_shape_func(inputs[0], convert(height_axis), convert(width_axis))]
+    return [
+        _global_pool2d_shape_func(inputs[0], convert(height_axis), convert(width_axis))
+    ]
 
 
 reg.register_shape_func("nn.global_max_pool2d", False, global_pool2d_shape_func)

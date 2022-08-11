@@ -29,6 +29,7 @@
 #include <string>
 #include <vector>
 
+#include "../op_common.h"
 #include "../../transforms/infer_layout_utils.h"
 
 namespace tvm {
@@ -253,17 +254,30 @@ bool SparseConv2dRel(const Array<Type>& types, int num_inputs, const Attrs& attr
   const auto* weight_indptr = types[3].as<TensorTypeNode>();
   if (data == nullptr) return false;
 
+  Array<IndexExpr> strides = param->strides;
+  Array<IndexExpr> dilation = param->dilation;
+  Array<IndexExpr> kdim = param->kernel_size;
+
+  IndexExpr dilated_ksize_y, dilated_ksize_x;
+
+  dilated_ksize_y = 1 + (kdim[0] - 1) * dilation[0];
+  dilated_ksize_x = 1 + (kdim[1] - 1) * dilation[1];
+
+  IndexExpr pad_h, pad_w;
+  GetPaddingHeightWidth(param->padding, &pad_h, &pad_w);
+
   if (weight_data->shape.size() == 2 || weight_data->shape.size() == 3) {
     // BSR case.
     if (param->layout == "NHWC") {
       Array<IndexExpr> oshape({data->shape[0], data->shape[1], data->shape[2],
                                (weight_indptr->shape[0] - 1) * weight_data->shape[1]});
+      LOG(FATAL) << "Have removed NHWC support for conv2d_sparse";
       reporter->Assign(types[4], TensorType(oshape, data->dtype));
       return true;
     } else if (param->layout == "NCHW") {
-      Array<IndexExpr> oshape({data->shape[0],
-                               (weight_indptr->shape[0] - 1) * weight_data->shape[1],
-                               data->shape[2], data->shape[3]});
+      Array<IndexExpr> oshape({data->shape[0], (weight_indptr->shape[0] - 1) * weight_data->shape[1], 0, 0});
+      oshape.Set(2, indexdiv(data->shape[2] + pad_h - dilated_ksize_y, param->strides[0]) + 1);
+      oshape.Set(3, indexdiv(data->shape[3] + pad_w - dilated_ksize_x, param->strides[1]) + 1);
       reporter->Assign(types[4], TensorType(oshape, data->dtype));
       return true;
     }

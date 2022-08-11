@@ -114,7 +114,11 @@ class Conv2dToSparseConv2dMutator : public ExprRewriter {
           Var weight_indptr(prefix + ".indptr", ws_indptr_type);
           auto attrs = make_object<SparseConv2DAttrs>();
           attrs->layout = std::move(layout_);
-          attrs->kernel_size = Array<IndexExpr>{kernel_size_, kernel_size_};
+          auto dense_attr = std::move(pre->attrs.as<Conv2DAttrs>());
+          attrs->strides = std::move(dense_attr->strides);
+          attrs->padding = std::move(dense_attr->padding);
+          attrs->kernel_size = std::move(dense_attr->kernel_size);
+          attrs->dilation = std::move(dense_attr->dilation);
           return Call(sparse_conv2d_op_, {data, weight_data, weight_indices, weight_indptr},
                       Attrs(attrs));
         }

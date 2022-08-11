@@ -21,7 +21,12 @@ import re
 
 from tvm import _ffi, ir, te, topi
 from tvm.target import generic_func, override_native_generic_func
-from tvm.topi.utils import get_const_float, get_const_int, get_const_tuple, get_float_tuple
+from tvm.topi.utils import (
+    get_const_float,
+    get_const_int,
+    get_const_tuple,
+    get_float_tuple,
+)
 
 from .. import op as _op
 
@@ -359,14 +364,18 @@ def depthwise_conv2d_NCHWc_strategy(attrs, inputs, out_type, target):
 @override_native_generic_func("conv2d_winograd_without_weight_transform_strategy")
 def conv2d_winograd_without_weight_transfrom_strategy(attrs, inputs, out_type, target):
     """conv2d_winograd_without_weight_transfrom generic strategy"""
-    raise ValueError("No generic implemenation for conv2d_winograd_without_weight_transform")
+    raise ValueError(
+        "No generic implemenation for conv2d_winograd_without_weight_transform"
+    )
 
 
 # conv2d_gemm_without_weight_transform
 @override_native_generic_func("conv2d_gemm_without_weight_transform_strategy")
 def conv2d_gemm_without_weight_transform_strategy(attrs, inputs, out_type, target):
     """conv2d_gemm_without_weight_transfrom generic strategy"""
-    raise ValueError("No generic implemenation for conv2d_gemm_without_weight_transform")
+    raise ValueError(
+        "No generic implemenation for conv2d_gemm_without_weight_transform"
+    )
 
 
 # conv2d_winograd_weight_transform
@@ -484,7 +493,9 @@ def conv2d_transpose_strategy(attrs, inputs, out_type, target):
         )
     else:  # group_transpose_conv2d
         strategy.add_implementation(
-            wrap_compute_conv2d_transpose(topi.nn.group_conv2d_transpose_nchw, has_groups=True),
+            wrap_compute_conv2d_transpose(
+                topi.nn.group_conv2d_transpose_nchw, has_groups=True
+            ),
             wrap_topi_schedule(topi.generic.schedule_group_conv2d_transpose_nchw),
             name="group_conv2d_transpose_nchw.generic",
         )
@@ -502,7 +513,9 @@ def wrap_compute_conv3d_transpose(topi_compute):
         output_padding = get_const_tuple(attrs.output_padding)
         out_dtype = attrs.out_dtype
         out_dtype = inputs[0].dtype if out_dtype in ("same", "") else out_dtype
-        out = topi_compute(inputs[0], inputs[1], strides, padding, out_dtype, output_padding)
+        out = topi_compute(
+            inputs[0], inputs[1], strides, padding, out_dtype, output_padding
+        )
         return [out]
 
     return compute_conv3d_transpose
@@ -528,7 +541,9 @@ def conv3d_transpose_strategy(attrs, inputs, out_type, target):
 
 
 # conv3d
-def wrap_compute_conv3d(topi_compute, need_layout=False, need_auto_scheduler_layout=False):
+def wrap_compute_conv3d(
+    topi_compute, need_layout=False, need_auto_scheduler_layout=False
+):
     """wrap conv3d topi compute"""
 
     def _compute_conv3d(attrs, inputs, out_type):
@@ -584,7 +599,9 @@ def conv3d_strategy(attrs, inputs, out_type, target):
 @override_native_generic_func("conv3d_winograd_without_weight_transform_strategy")
 def conv3d_winograd_without_weight_transfrom_strategy(attrs, inputs, out_type, target):
     """conv3d_winograd_without_weight_transfrom generic strategy"""
-    raise ValueError("No generic implemenation for conv3d_winograd_without_weight_transform")
+    raise ValueError(
+        "No generic implemenation for conv3d_winograd_without_weight_transform"
+    )
 
 
 # conv3d_winograd_weight_transform
@@ -606,7 +623,9 @@ def wrap_compute_conv1d(topi_compute):
         dilation = get_const_tuple(attrs.dilation)
         out_dtype = attrs.out_dtype
         out_dtype = inputs[0].dtype if out_dtype in ("same", "") else out_dtype
-        return [topi_compute(inputs[0], inputs[1], strides, padding, dilation, out_dtype)]
+        return [
+            topi_compute(inputs[0], inputs[1], strides, padding, dilation, out_dtype)
+        ]
 
     return _compute_conv1d
 
@@ -647,7 +666,9 @@ def wrap_compute_conv1d_transpose(topi_compute):
         out_dtype = attrs.out_dtype
         out_dtype = inputs[0].dtype if out_dtype in ("same", "") else out_dtype
         output_padding = get_const_tuple(attrs.output_padding)
-        out = topi_compute(inputs[0], inputs[1], strides, padding, out_dtype, output_padding)
+        out = topi_compute(
+            inputs[0], inputs[1], strides, padding, out_dtype, output_padding
+        )
         return [out]
 
     return _compute_conv1d_tranpsoe
@@ -819,7 +840,9 @@ def dense_pack_strategy(attrs, inputs, out_type, target):
 
 
 # batch_matmul
-def wrap_compute_batch_matmul(topi_compute, need_auto_scheduler_layout=False, need_out_dtype=False):
+def wrap_compute_batch_matmul(
+    topi_compute, need_auto_scheduler_layout=False, need_out_dtype=False
+):
     """wrap batch_matmul topi compute"""
 
     def _compute_batch_matmul(attrs, inputs, out_type):
@@ -853,7 +876,11 @@ def wrap_compute_sparse_dense(topi_compute):
     """wrap sparse dense topi compute"""
 
     def _compute_sparse_dense(attrs, inputs, out_type):
-        return [topi_compute(inputs[0], inputs[1], inputs[2], inputs[3], attrs["sparse_lhs"])]
+        return [
+            topi_compute(
+                inputs[0], inputs[1], inputs[2], inputs[3], attrs["sparse_lhs"]
+            )
+        ]
 
     return _compute_sparse_dense
 
@@ -913,7 +940,19 @@ def wrap_compute_sparse_conv2d(topi_compute):
     """wrap sparse conv2d topi compute"""
 
     def _compute_sparse_conv2d(attrs, inputs, out_type):
-        return [topi_compute(inputs[0], inputs[1], inputs[2], inputs[3], attrs["layout"])]
+        return [
+            topi_compute(
+                inputs[0],
+                inputs[1],
+                inputs[2],
+                inputs[3],
+                attrs["layout"],
+                attrs["kernel_size"],
+                attrs["padding"],
+                attrs["strides"],
+                attrs["dilation"],
+            )
+        ]
 
     return _compute_sparse_conv2d
 
@@ -1482,7 +1521,13 @@ def wrap_compute_bitserial_dense(topi_compute):
         unipolar = attrs.unipolar
         return [
             topi_compute(
-                inputs[0], inputs[1], data_bits, weight_bits, pack_dtype, out_dtype, unipolar
+                inputs[0],
+                inputs[1],
+                data_bits,
+                weight_bits,
+                pack_dtype,
+                out_dtype,
+                unipolar,
             )
         ]
 
@@ -1622,7 +1667,11 @@ def wrap_compute_uniform(topi_compute):
     """Wrap uniform topi compute"""
 
     def _compute_uniform(attrs, inputs, _):
-        return list(topi_compute(inputs[0], inputs[1], inputs[2], attrs.out_shape, attrs.out_dtype))
+        return list(
+            topi_compute(
+                inputs[0], inputs[1], inputs[2], attrs.out_shape, attrs.out_dtype
+            )
+        )
 
     return _compute_uniform
 

@@ -96,29 +96,10 @@ def process_params(
         if weight_kernel[0] != weight_kernel[1]:
             continue
 
-        if weight_kernel[0] == kernel_size == 1:
-            sparsity = 1.0 - (np.count_nonzero(w_np) / w_np.size)
-            if sparsity < sparsity_threshold:
-                continue
-            if layout == "NHWC":
-                w_np = w_np.squeeze().T
-            elif layout == "NCHW":
-                w_np = w_np.squeeze()
-
-            sparse_weight = sp.bsr_matrix(w_np, blocksize=block_size)
-
-            # when bs_c=1, remove this dim
-            if block_size[1] == 1:
-                sparse_weight_data = sparse_weight.data.reshape(
-                    sparse_weight.data.shape[0], block_size[0]
-                )
-            else:
-                sparse_weight_data = sparse_weight.data
-        elif weight_kernel[0] == kernel_size == 3:
-            if layout == "NHWC":  # HWIO
-                w_np = w_np.reshape((-1, w_np.shape[-1])).T
-            elif layout == "NCHW":  # OIHW
-                w_np = w_np.reshape((w_np.shape[0], -1))
+        if layout == "NHWC":
+            raise ValueError("Not supporting NHWC sparse for this fork")
+        elif layout == "NCHW":
+            w_np = w_np.reshape((w_np.shape[0], -1))
             sparse_weight = sp.bsr_matrix(w_np, blocksize=block_size)
             if 1 - (sparse_weight.nnz / w_np.size) < sparsity_threshold:
                 continue

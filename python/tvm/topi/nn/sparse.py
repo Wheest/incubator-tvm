@@ -20,7 +20,11 @@ from __future__ import absolute_import
 import tvm
 from tvm import te, auto_scheduler
 
-from ..utils import get_const_tuple
+from ..utils import get_const_tuple, traverse_inline
+from .conv2d_sparse_direct import (
+    sparse_conv2d_direct_compute_nchw,
+    schedule_sparse_conv2d_direct_nchw_cpu,
+)
 
 
 def sparse_dense_sp_rhs(data, weight_data, weight_indices, weight_indptr):
@@ -94,7 +98,9 @@ def sparse_dense_sp_lhs(data_data, data_indices, data_indptr, weight):
 
 
 # pylint: disable=no-else-return,inconsistent-return-statements
-def sparse_dense(dense_data, sparse_data, sparse_indices, sparse_indptr, sparse_lhs=False):
+def sparse_dense(
+    dense_data, sparse_data, sparse_indices, sparse_indptr, sparse_lhs=False
+):
     """
     Computes sparse-dense matrix multiplication of `data` and
     `(weight_data, weight_indices, weight_indptr).T`, if sparse_lhs=False
@@ -128,13 +134,20 @@ def sparse_dense(dense_data, sparse_data, sparse_indices, sparse_indptr, sparse_
         2-D with shape [M, N]
     """
     if sparse_lhs:
-        return sparse_dense_sp_lhs(sparse_data, sparse_indices, sparse_indptr, dense_data)
+        return sparse_dense_sp_lhs(
+            sparse_data, sparse_indices, sparse_indptr, dense_data
+        )
     else:
-        return sparse_dense_sp_rhs(dense_data, sparse_data, sparse_indices, sparse_indptr)
+        return sparse_dense_sp_rhs(
+            dense_data, sparse_data, sparse_indices, sparse_indptr
+        )
 
 
 def _sparse_dense_sp_lhs_csrmm(data_data, data_indices, data_indptr, weight):
-    oshape = (get_const_tuple(data_indptr.shape)[0] - 1, get_const_tuple(weight.shape)[0])
+    oshape = (
+        get_const_tuple(data_indptr.shape)[0] - 1,
+        get_const_tuple(weight.shape)[0],
+    )
 
     def f(row, i):
         row_start = data_indptr[row]
@@ -150,7 +163,10 @@ def _sparse_dense_sp_lhs_csrmm(data_data, data_indices, data_indptr, weight):
 
 
 def _sparse_dense_sp_rhs_csrmm(data, weight_data, weight_indices, weight_indptr):
-    oshape = (get_const_tuple(data.shape)[0], get_const_tuple(weight_indptr.shape)[0] - 1)
+    oshape = (
+        get_const_tuple(data.shape)[0],
+        get_const_tuple(weight_indptr.shape)[0] - 1,
+    )
 
     def f(i, row):
         row_start = weight_indptr[row]
@@ -567,7 +583,15 @@ def _sparse_conv2d_bsr_compute_nchw(data, weight_data, weight_indices, weight_in
 
 
 def sparse_conv2d(
-    dense_data, sparse_data, sparse_indices, sparse_indptr, layout="NHWC", kernel_size=1
+    dense_data,
+    sparse_data,
+    sparse_indices,
+    sparse_indptr,
+    layout="NHWC",
+    kernel_size=1,
+    padding=1,
+    strides=1,
+    dilation=1,
 ):
     """
     Computes sparse-conv2d(1*1) of ``data`` and
@@ -600,17 +624,48 @@ def sparse_conv2d(
         4-D with shape [M, H, W, N] (layout=NHWC)
         4-D with shape [M, N, H ,W] (layout=NCHW)
     """
-    if kernel_size == 1:
-        if layout == "NHWC":
-            return _sparse_conv2d_bsr_compute_nhwc(
-                dense_data, sparse_data, sparse_indices, sparse_indptr
-            )
-        elif layout == "NCHW":
-            return _sparse_conv2d_bsr_compute_nchw(
-                dense_data, sparse_data, sparse_indices, sparse_indptr
-            )
-    else:
-        raise ValueError("Unsupport Layout %s" % layout)
+    return sparse_conv2d_direct_compute_nchw(
+        dense_data,
+        sparse_data,
+        sparse_indices,
+        sparse_indptr,
+        kernel_size,
+        padding,
+        strides,
+        dilation,
+    )
+    # if kernel_size == 1:
+    #     if layout == "NHWC":
+    #         return _sparse_conv2d_bsr_compute_nhwc(
+    #             dense_data, sparse_data, sparse_indices, sparse_indptr
+    #         )
+    #     elif layout == "NCHW":
+    #         return _sparse_conv2d_bsr_compute_nchw(
+    #             dense_data, sparse_data, sparse_indices, sparse_indptr
+    #         )
+    # else:
+    #     raise ValueError("Unsupport Layout %s" % layout)
+
+
+def schedule_sparse_conv2d_cpu(outs):
+    outs = [outs] if isinstance(outs, te.tensor.Tensor) else outs
+    s = te.create_schedule([x.op for x in outs])
+    layout = "NCHW"  # hardcoding never hurt anyone...
+    output_op = outs[0].op
+
+    def _callback(op):
+        if "sparse_direct_conv2d" in op.tag:
+            conv_out = op.output(0)
+            data = conv_out.op.input_tensors[0]
+
+            args = [s, conv_out, data]
+            return schedule_sparse_conv2d_direct_nchw_cpu(*args)
+
+        # else:
+        #     raise ValueError(f"Unknown conv2d primitive: op: `{op.tag}`")
+
+    traverse_inline(s, output_op, _callback)
+    return s
 
 
 @auto_scheduler.register_task_input_check_func
@@ -634,7 +689,9 @@ def try_get_conv2d_sparse_input(args):
     """
     sparse_prefix = sparse_data = sparse_indices = sparse_indptr = None
 
-    def _process_inputs(input_tensors, m, h, w, n, prefix_init, layout):  # pylint: disable=C0103
+    def _process_inputs(
+        input_tensors, m, h, w, n, prefix_init, layout
+    ):  # pylint: disable=C0103
         nonlocal sparse_prefix
         nonlocal sparse_data
         nonlocal sparse_indices
@@ -775,7 +832,9 @@ def sparse_add(dense_data, sparse_data, sparse_indices, sparse_indptr):
     return _sparse_add_csr(dense_data, sparse_data, sparse_indices, sparse_indptr)
 
 
-def _sparse_add_csr(dense_data_inp, sparse_data_inp, sparse_indices_inp, sparse_indptr_inp):
+def _sparse_add_csr(
+    dense_data_inp, sparse_data_inp, sparse_indices_inp, sparse_indptr_inp
+):
     oshape = get_const_tuple(dense_data_inp.shape)
 
     def _csr_add_ir(dense_data, sparse_data, sparse_indices, sparse_indptr, out_data):
@@ -797,7 +856,9 @@ def _sparse_add_csr(dense_data_inp, sparse_data_inp, sparse_indices_inp, sparse_
             with irb.for_range(0, diff, kind="serial", name="idx") as idx:
                 real_idx = offset + idx
                 col = sparse_indices_ptr[real_idx]
-                out_data_ptr[row, col] = sparse_data_ptr[real_idx] + out_data_ptr[row, col]
+                out_data_ptr[row, col] = (
+                    sparse_data_ptr[real_idx] + out_data_ptr[row, col]
+                )
 
         return irb.get()
 
