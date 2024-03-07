@@ -86,8 +86,8 @@ void MainFuncVisitorState::VisitStmt_(const LetStmtNode* op, CodeGenC* codegen) 
 
           // Open file to read binary data
           // codegen->PrintIndent();
-          stream << "  read_file_into_memory(\"rom://" << var_name << ".dat\", &" << var_name
-                 << ");\n\n";
+          stream << "  if (read_file_into_memory(\"rom:/" << var_name << ".dat\", &" << var_name
+                 << ") != 0) return 0;\n\n";
         }
       }
       load_var_code_[var_name] += stream.str();

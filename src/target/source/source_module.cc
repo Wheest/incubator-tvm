@@ -331,6 +331,30 @@ class CSourceCrtMetadataModuleNode : public runtime::ModuleNode {
     code_ << "}\n\n";
   }
 
+  void GenerateBinarisedArray(const std::string& name, const runtime::NDArray& array,
+                              int64_t nelems) {
+    std::vector<float> out_data(nelems);  // TODO make this work for other types using DataType
+    array.CopyToBytes(out_data.data(), nelems * sizeof(float));
+
+    // Save the data to a file (in big-endian format)
+    std::string filePath = "./filesystem/" + name + ".dat";
+    std::ofstream outFile(filePath, std::ios::binary);
+    if (!outFile) {
+      std::cerr << "Cannot open file for writing: " << filePath << std::endl;
+      return;
+    }
+    for (float value : out_data) {
+      // This is a simple implementation assuming IEEE 754 format and 4-byte floats.
+      char* floatToConvert = reinterpret_cast<char*>(&value);
+      std::reverse(floatToConvert, floatToConvert + sizeof(float));
+
+      // Write to file
+      outFile.write(reinterpret_cast<const char*>(&value), sizeof(float));
+    }
+
+    outFile.close();
+  }
+
   void GenerateConstantBuffer(const ConstantPoolInfoNode* pool_info, size_t allocated_size) {
     size_t ord = 0;
     if (pool_info->constant_info_array.size() > 0) {
@@ -345,26 +369,38 @@ class CSourceCrtMetadataModuleNode : public runtime::ModuleNode {
                 [](const ConstantInfo& a, const ConstantInfo& b) {
                   return a->byte_offset->value < b->byte_offset->value;
                 });
-      for (const auto& const_info : const_info_vec) {
-        const auto& data = const_info->data;
-        const auto& offs = const_info->byte_offset;
-        int64_t num_elements = std::accumulate(data.Shape().begin(), data.Shape().end(), 1,
-                                               std::multiplies<int64_t>());
-        code_ << "  ";
-        codegen_c_base_.PrintType(data.DataType(), code_);
-        code_ << " " << const_info->name_hint << "[" << num_elements << "] __attribute__(("
-              << (ord++ ? "packed, " : "") << "aligned(" << metadata_->constant_alignment << ")));";
-        code_ << " // " << num_elements * data.DataType().bytes()
-              << " bytes, aligned offset: " << offs << "\n";
-      }
+      // for (const auto& const_info : const_info_vec) {
+      //   const auto& data = const_info->data;
+      //   const auto& offs = const_info->byte_offset;
+      //   int64_t num_elements = std::accumulate(data.Shape().begin(), data.Shape().end(), 1,
+      //                                          std::multiplies<int64_t>());
+      //   code_ << "  ";
+      //   codegen_c_base_.PrintType(data.DataType(), code_);
+      //   code_ << " " << const_info->name_hint << "[" << num_elements << "] __attribute__(("
+      //         << (ord++ ? "packed, " : "") << "aligned(" << metadata_->constant_alignment <<
+      //         ")));";
+      //   code_ << " // " << num_elements * data.DataType().bytes()
+      //         << " bytes, aligned offset: " << offs << "\n";
+      // }
       code_ << "} " << pool_info->pool_name << " = {\n";
 
       // emit struct field initialization data
+      // for (const auto& const_info : const_info_vec) {
+      //   code_ << "  ." << const_info->name_hint << " = {\n";
+      //   codegen::NDArrayDataToC(const_info->data, 4, code_);
+      //   code_ << "  },\n";
+      // }
+
+      // generate binarised array `.dat` files
       for (const auto& const_info : const_info_vec) {
-        code_ << "  ." << const_info->name_hint << " = {\n";
-        codegen::NDArrayDataToC(const_info->data, 4, code_);
-        code_ << "  },\n";
+        const auto& arrdata = const_info->data;
+        const auto& offs = const_info->byte_offset;
+        int64_t num_elements = std::accumulate(arrdata.Shape().begin(), arrdata.Shape().end(), 1,
+                                               std::multiplies<int64_t>());
+        const auto& data = const_info->data;
+        GenerateBinarisedArray(const_info->name_hint, arrdata, num_elements);
       }
+
       code_ << "};";
       code_ << "// of total size " << allocated_size << " bytes\n";
     } else {
