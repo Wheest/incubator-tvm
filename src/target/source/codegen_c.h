@@ -40,12 +40,14 @@
 #include <vector>
 
 #include "../../tir/transforms/ir_utils.h"
+#include "codegen_c_disk_data.h"
 #include "codegen_source_base.h"
 
 namespace tvm {
 namespace codegen {
 
 using namespace tir;
+
 /*!
  * \brief A base class to generate C code.
  *
@@ -60,11 +62,15 @@ class CodeGenC : public ExprFunctor<void(const PrimExpr&, std::ostream&)>,
                  public StmtFunctor<void(const Stmt&)>,
                  public CodeGenSourceBase {
  public:
+  CodeGenC() : main_state_(std::make_unique<DefaultVisitorState>()) {}
   /*!
    * \brief Initialize the code generator.
    * \param output_ssa Whether output SSA.
    */
   void Init(bool output_ssa);
+
+  void switchToMainFuncMode();
+  void switchToDefaultMode();
 
   /*!
    * \brief Add the function declaration to the generated module,
@@ -84,6 +90,8 @@ class CodeGenC : public ExprFunctor<void(const PrimExpr&, std::ostream&)>,
    * \param func The function to be compiled.
    */
   virtual void AddFunction(const GlobalVar& gvar, const PrimFunc& func);
+
+  void AddMainHelperFunctions();
 
   /*!
    * \brief Get the name of a declared function
@@ -234,6 +242,12 @@ class CodeGenC : public ExprFunctor<void(const PrimExpr&, std::ostream&)>,
     constants_byte_alignment_ = constants_byte_alignment;
   }
 
+  /*! \brief whether to print in SSA form */
+  bool print_ssa_form_{false};
+
+  /*! \brief the data type of allocated buffers */
+  std::unordered_map<const VarNode*, DataType> handle_data_type_;
+
  protected:
   // Print reference to struct location
   std::string GetStructRef(DataType t, const PrimExpr& buffer, const PrimExpr& index, int kind);
@@ -309,20 +323,18 @@ class CodeGenC : public ExprFunctor<void(const PrimExpr&, std::ostream&)>,
   std::string restrict_keyword_{""};
   /*! \brief the storage scope of allocation */
   std::unordered_map<const VarNode*, std::string> alloc_storage_scope_;
-  /*! \brief the data type of allocated buffers */
-  std::unordered_map<const VarNode*, DataType> handle_data_type_;
   /*! \brief Record of ops that have pre-defined global symbol. */
   OpAttrMap<TGlobalSymbol> op_attr_global_symbol_ = Op::GetAttrMap<TGlobalSymbol>("TGlobalSymbol");
   // cache commonly used ops
   const Op& builtin_call_extern_ = builtin::call_extern();
   const Op& builtin_call_pure_extern_ = builtin::call_pure_extern();
   Integer constants_byte_alignment_ = 16;
-  /*! \brief whether to print in SSA form */
-  bool print_ssa_form_{false};
 
  private:
   /*! \brief set of volatile buf access */
   std::unordered_set<const VarNode*> volatile_buf_;
+
+  std::unique_ptr<VisitorState> main_state_;
 
   // deep comparison of PrimExpr
   ExprDeepEqual deep_equal_;

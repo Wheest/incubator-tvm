@@ -67,6 +67,21 @@ class CodeGenSourceBase {
    */
   virtual void PrintType(const Type& type, std::ostream& os);  // NOLINT(*)
 
+  /*! \brief print the current indented value */
+  void PrintIndent();
+  /*!
+   * \brief Allocate a variable name for a newly defined var.
+   * \param v The variable.
+   * \return the variable name.
+   */
+  std::string AllocVarID(const tir::VarNode* v);
+
+  /*! \brief name of each variable */
+  std::unordered_map<const tir::VarNode*, std::string> var_idmap_;
+
+  /*! \brief the stream to be printed */
+  std::ostringstream stream;
+
  protected:
   /*! \brief entry in ssa assign map */
   struct SSAEntry {
@@ -77,14 +92,6 @@ class CodeGenSourceBase {
   };
   /*! \brief Clear the states that might relates to function generation */
   void ClearFuncState();
-  /*! \brief print the current indented value */
-  void PrintIndent();
-  /*!
-   * \brief Allocate a variable name for a newly defined var.
-   * \param v The variable.
-   * \return the variable name.
-   */
-  std::string AllocVarID(const tir::VarNode* v);
   /*!
    * \brief Get a variable name.
    * \param v The variable.
@@ -118,12 +125,8 @@ class CodeGenSourceBase {
 
   /*! \brief the declaration stream */
   std::ostringstream decl_stream;
-  /*! \brief the stream to be printed */
-  std::ostringstream stream;
   /*! \brief the forward declaration stream */
   std::ostringstream fwd_decl_stream;
-  /*! \brief name of each variable */
-  std::unordered_map<const tir::VarNode*, std::string> var_idmap_;
   /*! \brief NameSupply for allocation */
   NameSupply name_supply_ = NameSupply("");
 

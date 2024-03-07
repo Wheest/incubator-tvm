@@ -29,6 +29,7 @@
 #include <iomanip>
 
 #include "../../arith/pattern_match.h"
+#include "codegen_c_disk_data.h"
 #include "codegen_params.h"
 
 namespace tvm {
@@ -44,6 +45,10 @@ void CodeGenC::InitFuncState(const PrimFunc& f) {
   CodeGenSourceBase::ClearFuncState();
   ReserveKeywordsAsUnique();
 }
+
+void CodeGenC::switchToMainFuncMode() { main_state_ = std::make_unique<MainFuncVisitorState>(); }
+
+void CodeGenC::switchToDefaultMode() { main_state_ = std::make_unique<DefaultVisitorState>(); }
 
 void CodeGenC::ReserveKeywordsAsUnique() {
   // skip the first underscore, so SSA variable starts from _1
@@ -160,14 +165,90 @@ void CodeGenC::AddFunction(const GlobalVar& gvar, const PrimFunc& f) {
   // clear previous generated state.
   InitFuncState(f);
 
+  if (function_name == "tvmgen_default___tvm_main__") AddMainHelperFunctions();
+
   PrintFunctionSignature(function_name, f, stream);
   stream << " {\n";
   this->PreFunctionBody(f);
   int func_scope = this->BeginScope();
-  this->PrintStmt(f->body);
+  if (function_name == "tvmgen_default___tvm_main__") {
+    switchToMainFuncMode();
+    this->PrintIndent();
+    stream << "FILE* file;\n";
+    this->PrintStmt(f->body);
+    switchToDefaultMode();
+  } else
+    this->PrintStmt(f->body);
   this->EndScope(func_scope);
   this->PrintIndent();
   this->stream << "}\n\n";
+}
+
+void CodeGenC::AddMainHelperFunctions() {
+  this->PrintIndent();
+  stream << "int read_file_into_memory(const char *filename, float **data_ptr) {\n";
+
+  this->PrintIndent();
+  stream << "  FILE *file = fopen(filename, \"rb\");\n";
+  this->PrintIndent();
+  stream << "  if (!file) {\n";
+  this->PrintIndent();
+  stream << "    printf(\"Could not open file %s\\n\", filename);\n";
+  this->PrintIndent();
+  stream << "    return 1;\n";
+  this->PrintIndent();
+  stream << "  }\n";
+  this->PrintIndent();
+  stream << "  fseek(file, 0, SEEK_END);\n";
+  this->PrintIndent();
+  stream << "  int size = ftell(file);\n";
+  this->PrintIndent();
+  stream << "  rewind(file);\n";
+  this->PrintIndent();
+  stream << "  if (size % sizeof(float) != 0) {\n";
+  this->PrintIndent();
+  stream << "    printf(\"File size is not a multiple of float size\\n\");\n";
+  this->PrintIndent();
+  stream << "    fclose(file);\n";
+  this->PrintIndent();
+  stream << "    return 1;\n";
+  this->PrintIndent();
+  stream << "  }\n";
+  this->PrintIndent();
+  stream << "  size_t float_count = size / sizeof(float);\n";
+  this->PrintIndent();
+  stream << "  *data_ptr = (float *)memalign(16, ROUND_UP(float_count * sizeof(float), 16));\n";
+  this->PrintIndent();
+  stream << "  if (!*data_ptr) {\n";
+  this->PrintIndent();
+  stream << "    printf(\"Memory allocation failed\\n\");\n";
+  this->PrintIndent();
+  stream << "    fclose(file);\n";
+  this->PrintIndent();
+  stream << "    return 1;\n";
+  this->PrintIndent();
+  stream << "  }\n";
+  this->PrintIndent();
+  stream << "  size_t result = fread(*data_ptr, sizeof(float), float_count, file);\n";
+  this->PrintIndent();
+  stream << "  if (result != float_count) {\n";
+  this->PrintIndent();
+  stream << "    printf(\"Error reading file\\n\");\n";
+  this->PrintIndent();
+  stream << "    free(*data_ptr);\n";
+  this->PrintIndent();
+  stream << "    fclose(file);\n";
+  this->PrintIndent();
+  stream << "    return 1;\n";
+  this->PrintIndent();
+  stream << "  }\n";
+  this->PrintIndent();
+  stream << "  fclose(file);\n\n";
+
+  this->PrintIndent();
+  stream << "  return 0;\n";
+  this->PrintIndent();
+  stream << "}\n";
 }
 
 void CodeGenC::PrintFuncPrefix(std::ostream& os) {}
@@ -931,23 +1012,24 @@ void CodeGenC::VisitExpr_(const SelectNode* op, std::ostream& os) {  // NOLINT(*
 }
 
 void CodeGenC::VisitStmt_(const LetStmtNode* op) {
-  std::string value = PrintExpr(op->value);
-  if (print_ssa_form_) {
-    ICHECK(!var_idmap_.count(op->var.get()));
-    var_idmap_[op->var.get()] = value;
-  } else {
-    PrintIndent();
-    if (op->var.dtype() == DataType::Handle() && handle_data_type_.count(op->var.get())) {
-      PrintType(handle_data_type_.at(op->var.get()), stream);
-      stream << "* " << AllocVarID(op->var.get()) << " = (";
-      PrintType(handle_data_type_.at(op->var.get()), stream);
-      stream << "*)" << value << ";\n";
-    } else {
-      PrintType(op->var.dtype(), this->stream);
-      this->stream << ' ' << AllocVarID(op->var.get()) << " = " << value << ";\n";
-    }
-  }
-  PrintStmt(op->body);
+  main_state_->VisitStmt_(op, this);
+  // std::string value = PrintExpr(op->value);
+  // if (print_ssa_form_) {
+  //   ICHECK(!var_idmap_.count(op->var.get()));
+  //   var_idmap_[op->var.get()] = value;
+  // } else {
+  //   PrintIndent();
+  //   if (op->var.dtype() == DataType::Handle() && handle_data_type_.count(op->var.get())) {
+  //     PrintType(handle_data_type_.at(op->var.get()), stream);
+  //     stream << "* " << AllocVarID(op->var.get()) << " = (";
+  //     PrintType(handle_data_type_.at(op->var.get()), stream);
+  //     stream << "*)" << value << ";\n";
+  //   } else {
+  //     PrintType(op->var.dtype(), this->stream);
+  //     this->stream << ' ' << AllocVarID(op->var.get()) << " = " << value << ";\n";
+  //   }
+  // }
+  // PrintStmt(op->body);
 }
 
 void CodeGenC::VisitStmt_(const AllocateNode* op) {
