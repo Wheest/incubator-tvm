@@ -18,16 +18,23 @@ class VisitorState {
  public:
   virtual ~VisitorState() = default;
   virtual void VisitStmt_(const LetStmtNode* op, CodeGenC* codegen) = 0;
+  virtual void LoadArrays(const CallNode* op, CodeGenC* codegen) = 0;
+
+ protected:
+  // Map of code strings for loading each variable from disk
+  std::unordered_map<std::string, std::string> load_var_code_;
 };
 
 class DefaultVisitorState : public VisitorState {
  public:
   void VisitStmt_(const LetStmtNode* op, CodeGenC* codegen) override;
+  void LoadArrays(const CallNode* op, CodeGenC* codegen) override;
 };
 
 class MainFuncVisitorState : public VisitorState {
  public:
   void VisitStmt_(const LetStmtNode* op, CodeGenC* codegen) override;
+  void LoadArrays(const CallNode* op, CodeGenC* codegen) override;
 };
 
 }  // namespace codegen

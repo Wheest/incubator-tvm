@@ -46,9 +46,15 @@ void CodeGenC::InitFuncState(const PrimFunc& f) {
   ReserveKeywordsAsUnique();
 }
 
-void CodeGenC::switchToMainFuncMode() { main_state_ = std::make_unique<MainFuncVisitorState>(); }
+void CodeGenC::switchToMainFuncMode() {
+  main_state_ = std::make_unique<MainFuncVisitorState>();
+  main_state = true;
+}
 
-void CodeGenC::switchToDefaultMode() { main_state_ = std::make_unique<DefaultVisitorState>(); }
+void CodeGenC::switchToDefaultMode() {
+  main_state_ = std::make_unique<DefaultVisitorState>();
+  main_state = false;
+}
 
 void CodeGenC::ReserveKeywordsAsUnique() {
   // skip the first underscore, so SSA variable starts from _1
@@ -662,6 +668,7 @@ void CodeGenC::VisitExpr_(const CallNode* op, std::ostream& os) {  // NOLINT(*)
 
     if (op->op.same_as(builtin::tvm_check_return())) {
       const CallNode* call = op->args[2].as<CallNode>();
+      if (main_state) main_state_->LoadArrays(call, this);  // load any arrays that might be needed
       os << "if (";
       VisitExpr_(call, os);
       os << " != ";

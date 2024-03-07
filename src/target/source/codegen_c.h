@@ -71,6 +71,7 @@ class CodeGenC : public ExprFunctor<void(const PrimExpr&, std::ostream&)>,
 
   void switchToMainFuncMode();
   void switchToDefaultMode();
+  bool main_state = false;
 
   /*!
    * \brief Add the function declaration to the generated module,
