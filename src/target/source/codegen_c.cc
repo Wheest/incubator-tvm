@@ -675,6 +675,11 @@ void CodeGenC::VisitExpr_(const CallNode* op, std::ostream& os) {  // NOLINT(*)
       PrintExpr(op->args[0], os);
       os << " ) return ";
       PrintExpr(op->args[1], os);
+      if (main_state) {
+        // free any arrays that we don't need
+        os << ";\n";
+        main_state_->FreeArrays(call, this, os);
+      };
     } else if (op->op.same_as(builtin::ret())) {
       os << "return ";
       PrintExpr(op->args[0], os);

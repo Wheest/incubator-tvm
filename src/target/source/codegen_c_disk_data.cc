@@ -113,5 +113,22 @@ void MainFuncVisitorState::LoadArrays(const CallNode* op, CodeGenC* codegen) {
     }
   }
 }
+
+void DefaultVisitorState::FreeArrays(const CallNode* op, CodeGenC* codegen, std::ostream& os) {}
+
+void MainFuncVisitorState::FreeArrays(const CallNode* op, CodeGenC* codegen, std::ostream& os) {
+  // Here we will load the arrays from disk, after identifying which ones this function call needs.
+  // Our code to load is stored in load_var_code_
+  for (size_t i = 1; i < op->args.size(); i++) {
+    // check if the arg is in our load_var_code_
+    // if it is, we will print the code to free it
+    auto name = op->args[i].as<VarNode>()->name_hint;
+    // stream << "// we will load " << name << "\n";
+    if (load_var_code_.count(name)) {
+      os << "  free(" << name << ");\n";
+      os << "  " << name << " = NULL;\n ";
+    }
+  }
+}
 }  // namespace codegen
 }  // namespace tvm
