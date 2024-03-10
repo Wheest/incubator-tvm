@@ -40,6 +40,8 @@ void MainFuncVisitorState::VisitStmt_(const LetStmtNode* op, CodeGenC* codegen) 
   std::string value = codegen->PrintExpr(op->value);
   std::string var_name = codegen->AllocVarID(op->var.get());
 
+  std::string dtype = "void";
+
   if (codegen->print_ssa_form_) {
     ICHECK(!var_idmap_.count(op->var.get()));
     codegen->var_idmap_[op->var.get()] = value;
@@ -81,7 +83,7 @@ void MainFuncVisitorState::VisitStmt_(const LetStmtNode* op, CodeGenC* codegen) 
           ICHECK(op_call->args.size() == 1 && load);
           ICHECK_EQ(load->indices.size(), 1) << "CodeGenC only supports flat memory allocations.";
 
-          stream << "  static float";
+          stream << "  static " << dtype;
           stream << "* " << var_name << "; // Declare without immediate initialization \n";
 
           // Open file to read binary data
@@ -99,15 +101,13 @@ void MainFuncVisitorState::VisitStmt_(const LetStmtNode* op, CodeGenC* codegen) 
 void DefaultVisitorState::LoadArrays(const CallNode* op, CodeGenC* codegen) {}
 
 void MainFuncVisitorState::LoadArrays(const CallNode* op, CodeGenC* codegen) {
-  // Here we will load the arrays from disk, after identifying which ones this function call needs.
-  // Our code to load is stored in load_var_code_
-  // CallNode
+  // Here we will load the arrays from disk, after identifying which ones this function call
+  // needs. Our code to load is stored in load_var_code_ CallNode
   auto& stream = codegen->stream;
   for (size_t i = 1; i < op->args.size(); i++) {
     // check if the arg is in our load_var_code_
     // if it is, we will print the code to load it
     auto name = op->args[i].as<VarNode>()->name_hint;
-    // stream << "// we will load " << name << "\n";
     if (load_var_code_.count(name)) {
       stream << load_var_code_[name];
     }
@@ -117,13 +117,12 @@ void MainFuncVisitorState::LoadArrays(const CallNode* op, CodeGenC* codegen) {
 void DefaultVisitorState::FreeArrays(const CallNode* op, CodeGenC* codegen, std::ostream& os) {}
 
 void MainFuncVisitorState::FreeArrays(const CallNode* op, CodeGenC* codegen, std::ostream& os) {
-  // Here we will load the arrays from disk, after identifying which ones this function call needs.
-  // Our code to load is stored in load_var_code_
+  // Here we will load the arrays from disk, after identifying which ones this function call
+  // needs. Our code to load is stored in load_var_code_
   for (size_t i = 1; i < op->args.size(); i++) {
     // check if the arg is in our load_var_code_
     // if it is, we will print the code to free it
     auto name = op->args[i].as<VarNode>()->name_hint;
-    // stream << "// we will load " << name << "\n";
     if (load_var_code_.count(name)) {
       os << "  free(" << name << ");\n";
       os << "  " << name << " = NULL;\n ";

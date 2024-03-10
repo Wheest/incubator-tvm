@@ -331,11 +331,75 @@ class CSourceCrtMetadataModuleNode : public runtime::ModuleNode {
     code_ << "}\n\n";
   }
 
+  template <typename T>
+  T swap_endian(T u) {
+    static_assert(CHAR_BIT == 8, "CHAR_BIT != 8");
+
+    union {
+      T u;
+      unsigned char u8[sizeof(T)];
+    } source, dest;
+
+    source.u = u;
+
+    for (size_t k = 0; k < sizeof(T); k++) dest.u8[k] = source.u8[sizeof(T) - k - 1];
+
+    return dest.u;
+  }
+
+  void saveFloat32DataInBigEndian(std::ofstream& outFile, const char* buffer, size_t size) {
+    for (size_t i = 0; i < size; i += sizeof(float)) {
+      float value;
+      std::memcpy(&value, buffer + i, sizeof(float));
+      value = swap_endian(value);
+      outFile.write(reinterpret_cast<const char*>(&value), sizeof(float));
+    }
+  }
+
+  template <typename T>
+  void saveInt8Data(std::ofstream& outFile, const std::vector<T> src) {
+    // Convert 32 or 16 bit ints to 8 bit ints, raise error if out of range
+    for (auto val : src) {
+      if (val < INT8_MIN || val > INT8_MAX) {
+        LOG(FATAL) << "Value out of range: " << val << std::endl;
+        // Handle the error condition appropriately
+      } else {
+        int8_t int8_val = static_cast<int8_t>(val);
+        outFile.write(reinterpret_cast<const char*>(&int8_val), sizeof(int8_t));
+      }
+    }
+  }
+
+  template <typename T>
+  void saveIntDataInBigEndian(std::ofstream& outFile, const char* buffer, size_t size) {
+    for (size_t i = 0; i < size; i += sizeof(T)) {
+      T value;
+      std::memcpy(&value, buffer + i, sizeof(T));
+      value = swap_endian(value);
+      outFile.write(reinterpret_cast<const char*>(&value), sizeof(T));
+    }
+  }
+
+  template <typename T>
+  void save_to_csv(const std::vector<T>& data, const std::string& filename) {
+    std::ofstream csv_file(filename);
+    if (!csv_file.is_open()) {
+      LOG(FATAL) << "Failed to create the file: " << filename << std::endl;
+      return;
+    }
+    for (size_t i = 0; i < data.size(); ++i) {
+      csv_file << data[i];
+      if (i != data.size() - 1) {
+        csv_file << ",";
+      }
+    }
+
+    csv_file << std::endl;
+    csv_file.close();
+  }
+
   void GenerateBinarisedArray(const std::string& name, const runtime::NDArray& array,
                               int64_t nelems) {
-    std::vector<float> out_data(nelems);  // TODO make this work for other types using DataType
-    array.CopyToBytes(out_data.data(), nelems * sizeof(float));
-
     // Save the data to a file (in big-endian format)
     std::string filePath = "./filesystem/" + name + ".dat";
     std::ofstream outFile(filePath, std::ios::binary);
@@ -343,13 +407,27 @@ class CSourceCrtMetadataModuleNode : public runtime::ModuleNode {
       std::cerr << "Cannot open file for writing: " << filePath << std::endl;
       return;
     }
-    for (float value : out_data) {
-      // This is a simple implementation assuming IEEE 754 format and 4-byte floats.
-      char* floatToConvert = reinterpret_cast<char*>(&value);
-      std::reverse(floatToConvert, floatToConvert + sizeof(float));
 
-      // Write to file
-      outFile.write(reinterpret_cast<const char*>(&value), sizeof(float));
+    if (array.DataType().is_float() && array.DataType().bits() == 32) {
+      std::vector<float> out_data(nelems);
+      array.CopyToBytes(out_data.data(), nelems * sizeof(float));
+      saveFloat32DataInBigEndian(outFile, reinterpret_cast<const char*>(out_data.data()),
+                                 out_data.size() * sizeof(float));
+    } else if (array.DataType().is_int() && array.DataType().bits() == 16) {
+      std::vector<int16_t> out_data(nelems);
+      array.CopyToBytes(out_data.data(), nelems * array.DataType().bytes());
+      save_to_csv(out_data, "./csvdata/" + name + "_int16_size_" + std::to_string(nelems) + ".csv");
+      saveIntDataInBigEndian<int16_t>(outFile, reinterpret_cast<const char*>(out_data.data()),
+                                      out_data.size() * array.DataType().bytes());
+    } else if (array.DataType().is_int() && array.DataType().bits() == 32) {
+      std::vector<int32_t> out_data(nelems);
+      array.CopyToBytes(out_data.data(), nelems * array.DataType().bytes());
+      save_to_csv(out_data, "./csvdata/" + name + "_int32_size_" + std::to_string(nelems) + ".csv");
+      saveIntDataInBigEndian<int32_t>(outFile, reinterpret_cast<const char*>(out_data.data()),
+                                      out_data.size() * array.DataType().bytes());
+    } else {
+      LOG(FATAL) << "Unsupported datatype with " << array.DataType().bits()
+                 << " bits (type code enum is: " << array.DataType().code() << "\n";
     }
 
     outFile.close();

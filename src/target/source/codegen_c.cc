@@ -191,8 +191,10 @@ void CodeGenC::AddFunction(const GlobalVar& gvar, const PrimFunc& f) {
 }
 
 void CodeGenC::AddMainHelperFunctions() {
+  std::string dtype = "void";
+
   this->PrintIndent();
-  stream << "int read_file_into_memory(const char *filename, float **data_ptr) {\n";
+  stream << "int read_file_into_memory(const char *filename, " << dtype << " **data_ptr) {\n";
 
   this->PrintIndent();
   stream << "  FILE *file = fopen(filename, \"rb\");\n";
@@ -211,9 +213,9 @@ void CodeGenC::AddMainHelperFunctions() {
   this->PrintIndent();
   stream << "  rewind(file);\n";
   this->PrintIndent();
-  stream << "  if (size % sizeof(float) != 0) {\n";
+  stream << "  if (size % sizeof(" << dtype << ") != 0) {\n";
   this->PrintIndent();
-  stream << "    printf(\"File size is not a multiple of float size\\n\");\n";
+  stream << "    printf(\"File size is not a multiple of " << dtype << " size\\n\");\n";
   this->PrintIndent();
   stream << "    fclose(file);\n";
   this->PrintIndent();
@@ -221,9 +223,10 @@ void CodeGenC::AddMainHelperFunctions() {
   this->PrintIndent();
   stream << "  }\n";
   this->PrintIndent();
-  stream << "  size_t float_count = size / sizeof(float);\n";
+  stream << "  size_t " << dtype << "_count = size / sizeof(" << dtype << ");\n";
   this->PrintIndent();
-  stream << "  *data_ptr = (float *)memalign(16, ROUND_UP(float_count * sizeof(float), 16));\n";
+  stream << "  *data_ptr = (" << dtype << "*)memalign(16, ROUND_UP(" << dtype << "_count * sizeof("
+         << dtype << "), 16));\n";
   this->PrintIndent();
   stream << "  if (!*data_ptr) {\n";
   this->PrintIndent();
@@ -235,9 +238,10 @@ void CodeGenC::AddMainHelperFunctions() {
   this->PrintIndent();
   stream << "  }\n";
   this->PrintIndent();
-  stream << "  size_t result = fread(*data_ptr, sizeof(float), float_count, file);\n";
+  stream << "  size_t result = fread(*data_ptr, sizeof(" << dtype << "), " << dtype
+         << "_count, file);\n";
   this->PrintIndent();
-  stream << "  if (result != float_count) {\n";
+  stream << "  if (result != " << dtype << "_count) {\n";
   this->PrintIndent();
   stream << "    printf(\"Error reading file\\n\");\n";
   this->PrintIndent();
