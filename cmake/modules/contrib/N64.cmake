@@ -1,0 +1,5 @@
+if(USE_N64)
+  file(GLOB N64_SOURCE_RELAY_CONTRIB_SRC src/relay/backend/contrib/codegen_n64/*.cc)
+  list(APPEND COMPILER_SRCS ${N64_SOURCE_RELAY_CONTRIB_SRC})
+  message(STATUS  "Build with N64")
+endif(USE_N64)
