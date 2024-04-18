@@ -26,6 +26,8 @@
 #include <sstream>
 #include <string>
 
+#include "../../../op/op_common.h"
+#include "../../../qnn/utils.h"
 #include "../../../transforms/compiler_function_utils.h"
 #include "../../utils.h"
 #include "codegen_c.h"
@@ -51,10 +53,11 @@ Target GetN64CompilerTarget() {
  *
  * For testing and demonstration only, only a few binary operators are supported.
  */
-class CodegenC : public backend::MemoizedExprTranslator<std::vector<Output>>, public CodegenCBase {
+class CodegenN64 : public backend::MemoizedExprTranslator<std::vector<Output>>,
+                   public CodegenCBase {
  public:
-  CodegenC(std::unordered_map<std::string, runtime::NDArray>* const_name_to_constant,
-           Array<String>* const_names, bool* needs_extra_headers, std::string ext_func_id)
+  CodegenN64(std::unordered_map<std::string, runtime::NDArray>* const_name_to_constant,
+             Array<String>* const_names, bool* needs_extra_headers, std::string ext_func_id)
       : const_name_to_constant_(const_name_to_constant),
         const_names_(const_names),
         needs_extra_headers_(needs_extra_headers),
@@ -142,6 +145,11 @@ class CodegenC : public backend::MemoizedExprTranslator<std::vector<Output>>, pu
     std::ostringstream decl_stream;
     std::ostringstream buf_stream;
 
+    if (backend::IsOp(call, "nn.conv2d")) {
+      std::cout << "Wagwan, we have a conv2d op!" << std::endl;
+      return Conv2d(call);
+    }
+
     std::string func_name = ext_func_id_ + "_" + std::to_string(func_idx++);
 
     // Make function declaration
@@ -205,6 +213,105 @@ class CodegenC : public backend::MemoizedExprTranslator<std::vector<Output>>, pu
     output.need_copy = true;
     output.size = out_size;
     return {output};
+  }
+
+  std::vector<Output> Conv2d(const CallNode* call) {
+    std::ostringstream macro_stream;
+    std::ostringstream decl_stream;
+    std::ostringstream buf_stream;
+
+    // Setup function
+    std::string func_name = ext_func_id_ + "_" + std::to_string(func_idx++);
+    const auto* conv_attr = call->attrs.as<Conv2DAttrs>();
+    ICHECK(conv_attr);
+
+    // Distinguish between normal and depth-wise convolution
+    // if (conv_attr->channels.defined() &&
+    //     tvm::tir::ExprDeepEqual()(conv_attr->channels, conv_attr->groups) &&
+    //     conv_attr->groups != 1) {
+    //   ICHECK(conv_attr->kernel_layout == "IHWO")
+    //       << "Kernel layout must be IHWO, has the module been pre-processed correctly?";
+    // } else {
+    //   // Raise an error that regular conv2d is not supported
+    //   LOG(FATAL) << "Regular conv2d is not supported for RSP (yet!)";
+    // }
+
+    IndexExpr pad_h, pad_w;
+    int pad;
+    GetPaddingHeightWidth(conv_attr->padding, &pad_h, &pad_w);
+    if (pad_h.as<IntImmNode>()->value != pad_w.as<IntImmNode>()->value) {
+      LOG(FATAL) << "Asymetric padding is not supported for RSP (yet!)";
+    } else {
+      pad = pad_h.as<IntImmNode>()->value / 2;
+    }
+    std::cout << "Our padding is: " << pad << std::endl;
+
+    int stride_h = qnn::get_const_int(conv_attr->strides[0]);
+    int stride_w = qnn::get_const_int(conv_attr->strides[1]);
+    std::cout << "Our strides are: " << stride_h << ", " << stride_w << std::endl;
+    if (stride_h != stride_w) {
+      LOG(FATAL) << "Asymetric strides are not supported for RSP (yet!)";
+    }
+
+    // Make function declaration
+    macro_stream << "CSOURCE_RSP_DEPTH_CONV2D_OP(" << func_name << ", ";
+    auto in_shape = backend::GetShape(call->args[0]->checked_type());
+    const auto* type_node = call->checked_type().as<TensorTypeNode>();
+    ICHECK(type_node);
+    const auto& dtype = GetDtypeString(type_node);
+
+    auto out_shape = backend::GetShape(call->checked_type());
+    std::vector<int> out_shape_vec;
+    int out_size = 1;
+    for (size_t i = 0; i < out_shape.size(); ++i) {
+      out_size *= out_shape[i];
+      out_shape_vec.push_back(out_shape[i]);
+    }
+
+    int input_partition_height = 4;
+    int output_partition_height = 4;
+    macro_stream << input_partition_height << ", " << in_shape[1] << ", " << in_shape[2] << ", "
+                 << in_shape[3] << ", " << out_shape[1] << ", " << out_shape[2] << ", 3, 3, "
+                 << output_partition_height << ", " << pad << ", " << stride_h;
+    macro_stream << ");";
+    func_decl_.push_back(macro_stream.str());
+
+    // Make function call when visiting arguments
+    bool first = true;
+    decl_stream << func_name << "(";
+    std::string out_buff = "out0";
+    for (size_t i = 0; i < call->args.size(); ++i) {
+      auto res = VisitExpr(call->args[i]);
+      for (auto out : res) {
+        if (!first) {
+          decl_stream << ", ";
+        }
+        first = false;
+        decl_stream << out.name;
+      }
+    }
+
+    // std::string out = "buf_" + std::to_string(buf_idx_++);
+
+    // buf_stream << dtype << "* " << out << " = (" << dtype << "*)malloc(4 * " << out_size << ");";
+    // buf_decl_.push_back(buf_stream.str());
+
+    decl_stream << ", " << out_buff << ");";
+
+    decl_stream << "\n  printf(\"Hello, World!\\n\");";
+    ext_func_body_.push_back(decl_stream.str());
+
+    // Update output buffer
+    // Note C codegen only handles TensorType. Therefore, we don't flatten
+    // tuples and only return a single vaule.
+    Output output;
+    output.name = out_buff;
+    output.dtype = dtype;
+    std::cout << "Our output dtype is: " << dtype << std::endl;
+    output.need_copy = false;
+    output.size = out_size;
+    return {output};
+    // LOG(FATAL) << "Unrecognized op";
   }
 
   /*!
@@ -274,6 +381,7 @@ class CodegenN64Module {
     os << "#include <string.h>\n";
     os << "#include <tvm/runtime/c_runtime_api.h>\n";
     os << "#include <tvm/runtime/c_backend_api.h>\n";
+    os << "#include <libdragon.h>\n";
 
     if (needs_extra_headers_) {
       // This segment would be generated in C++ because of the usage
@@ -304,15 +412,194 @@ class CodegenN64Module {
           }                                                                \
         }                                                                  \
       }
+
+    #define CSOURCE_RSP_DEPTH_CONV2D_OP(p_ID_, p_INPUT_PARTITION_HEIGHT_, p_IN_H_, p_IN_W_, p_IN_C_, p_OUT_H_, p_OUT_W_, p_K_H_, p_K_W_, p_OUTPUT_PARTITION_HEIGHT_, p_PADDING_, p_STRIDE_) \
+      void p_ID_(int16_t *dest, int16_t *input_data, int16_t *weights) {   \
+        RSPDepthConvTiledPadded(dest, input_data, weights, p_INPUT_PARTITION_HEIGHT_, p_IN_H_, p_IN_W_, p_IN_C_, p_OUT_H_, p_OUT_W_, p_K_H_, p_K_W_, p_OUTPUT_PARTITION_HEIGHT_, p_PADDING_, p_STRIDE_); \
+      }
     )op_macro";
 
     os << operator_macro << "\n\n";
+
+    Conv2dRSPHelpers(os);
+  }
+
+  void Conv2dRSPHelpers(std::ostringstream& os) {
+    // Emit the helper code for the conv2d operator
+    const char* rsp_ucode_macro = R"ucode_macro(
+DEFINE_RSP_UCODE(rsp_simple);
+uint32_t vec_id;
+enum {
+  DMAWeights = 0x0,
+  DMAInputs = 0x1,
+  DepthConv = 0x2,
+};
+void vec_init() {
+  rspq_init();
+  vec_id = rspq_overlay_register(&rsp_simple);
+}
+void vec_close() { rspq_overlay_unregister(vec_id); }
+)ucode_macro";
+
+    os << rsp_ucode_macro << "\n\n";
+
+    const char* copy_slice_to_full_with_stride_macro = R"copy_macro(
+void copy_slice_to_full_with_stride(int16_t *dest, int16_t *output_pad_part,
+                                    int output_partition_height, int out_w,
+                                    int slice_count, int in_depth,
+                                    int depth_slice_num, size_t slice_depth,
+                                    int max_output_parition_height) {
+  // Copies a slice into the final destination with the appropriate stride
+  // e.g., a slice of size 4x4x8 could be copied into a 4x4x16 destination
+  // slice_depth should probably be the inner loop size (e.g., 8)
+  for (int y = 0; y < max_output_parition_height; y++) {
+    for (int x = 0; x < out_w; x++) {
+      // Calculate the initial destination address with offsets and strided gaps
+      int16_t *dest_ptr =
+          &dest[slice_count * output_partition_height * out_w * in_depth +
+                (y * out_w + x) * in_depth + (depth_slice_num * slice_depth)];
+      for (int c = 0; c < slice_depth; c++) {
+        // Perform the copy operation with stride
+        dest_ptr[c] =
+            output_pad_part[y * out_w * slice_depth + x * slice_depth + c];
+      }
+    }
+  }
+}
+)copy_macro";
+
+    os << copy_slice_to_full_with_stride_macro << "\n\n";
+
+    const char* min_macro = R"min_macro(
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+)min_macro";
+
+    os << min_macro << "\n\n";
+
+    const char* generate_padded_slices_with_depth_slice_macro = R"generate_macro(
+void generate_padded_slices_with_depth_slice(
+    int16_t *data, int16_t *padded_input_partition, int start_h, int in_h,
+    int in_w, int in_depth, int max_slice_height, int padding, int overlap,
+    int depth_slice // New parameter indicating which set of 8 channels to copy
+) {
+  // Calculate the size of the padded area (height)
+  int len = MIN(start_h + max_slice_height, in_h) - start_h;
+
+  // Calculate depth start and end based on the depth_slice
+  int depth_start =
+      depth_slice * 8; // Start at the depth_slice set of 8 channels
+  int depth_end =
+      MIN(depth_start + 8, in_depth); // Ensure we don't go beyond in_depth
+
+  // Clear the slice area
+  memset(padded_input_partition, 0,
+         sizeof(int16_t) * max_slice_height * (in_w + 2 * padding) * 8);
+
+  // Determine slice dimensions
+  int actual_start = (start_h == 0) ? start_h : start_h - padding;
+  int actual_end = start_h + len;
+
+  int target_start_h = (start_h == 0) ? padding : 0;
+
+  // Copy data to the padded slice
+  for (int h = actual_start; h < actual_end; ++h) {
+    for (int w = 0; w < in_w; ++w) {
+      for (int d = depth_start; d < depth_end; ++d) {
+        int16_t value = data[(h * in_w * in_depth) + (w * in_depth) + d];
+        int target_row = target_start_h + h - actual_start;
+        int target_col = w + padding;
+        int target_depth = d - depth_start;
+
+        padded_input_partition[(target_row * (in_w + 2 * padding) * 8) +
+                               (target_col * 8) + target_depth] = value;
+      }
+    }
+  }
+}
+)generate_macro";
+
+    os << generate_padded_slices_with_depth_slice_macro << "\n\n";
+
+    const char* rsp_depth_conv_tiled_padded_macro = R"rsp_macro(
+static inline void
+RSPDepthConvTiledPadded(int16_t *dest, int16_t *input_data, int16_t *weights,
+                        int input_partition_height, int in_h, int in_w,
+                        int in_c, int out_h, int out_w, int k_h, int k_w,
+                        int output_partition_height, int padding, int stride) {
+  // Requires that weights have been reshaped offline to be
+  // (out_c // 8, kernel_height * kernel_width, 8)
+  extern uint32_t vec_id;
+
+  // raise not implemented error if in_c is not 8
+  if (in_c % 8 != 0) {
+    printf("Error: in_c must be divisible by 8\n");
+    return;
+  }
+
+  int16_t *input_pad_part = malloc_uncached_aligned(
+      8, input_partition_height * (in_w + 2 * padding) * 8 * sizeof(int16_t));
+  int16_t *output_pad_part = malloc_uncached_aligned(
+      8, output_partition_height * out_w * 8 * sizeof(int16_t));
+  int out_part_size = output_partition_height * out_w * 8;
+
+  int overlap = k_h - stride;
+  for (int depth_slice = 0; depth_slice < in_c / 8; depth_slice++) {
+    int slice_count = 0;
+    int remaining_out_values = out_h * out_w * 8; // Remaining values to copy
+    int max_output_partition_height = output_partition_height;
+
+    // Copy weights to the RSP once
+    rspq_write(vec_id, DMAWeights,
+               PhysicalAddr(&weights[depth_slice * k_h * k_w * 8]));
+
+    // Generate first slice
+    generate_padded_slices_with_depth_slice(
+        input_data, (int16_t *)input_pad_part, 0, in_h, in_w, in_c,
+        input_partition_height, padding, overlap, depth_slice);
+    rspq_write(vec_id, DMAInputs, PhysicalAddr(input_pad_part));
+    int start_h_next = input_partition_height - overlap;
+
+    for (int start_h = 0; start_h < in_h;
+         start_h += input_partition_height - overlap) {
+
+      rspq_wait();
+      // Process the padded partition on the RSP
+      rspq_write(vec_id, DepthConv, PhysicalAddr(output_pad_part));
+      // Generate next slice while the current one is being
+      // processed
+      if (start_h_next <= in_h) {
+        generate_padded_slices_with_depth_slice(
+            input_data, (int16_t *)input_pad_part, start_h_next, in_h, in_w,
+            in_c, input_partition_height, padding, overlap, depth_slice);
+        start_h_next += input_partition_height - overlap;
+      }
+
+      // Copy back the processed partition to the final outputs,
+      // DMA the new input slice to the RSP at the same time
+      rspq_wait();
+      rspq_write(vec_id, DMAInputs, PhysicalAddr(input_pad_part));
+
+      if (remaining_out_values < out_part_size) {
+        // Cover the case where our final output slice is larger than required
+        max_output_partition_height = remaining_out_values / (out_w * 8);
+      }
+      copy_slice_to_full_with_stride(
+          dest, output_pad_part, output_partition_height, out_w, slice_count,
+          in_c, depth_slice, 8, max_output_partition_height);
+      remaining_out_values -= output_partition_height * out_w * 8;
+      slice_count++;
+    }
+  }
+}
+)rsp_macro";
+
+    os << rsp_depth_conv_tiled_padded_macro << "\n\n";
   }
 
   void GenCFunc(const Function& function) {
     ICHECK(function.defined()) << "Input error: expect a Relay function.";
     std::string ext_func_id = backend::GetExtSymbol(function);
-    CodegenC builder(&const_name_to_constant_, &const_names_, &needs_extra_headers_, ext_func_id);
+    CodegenN64 builder(&const_name_to_constant_, &const_names_, &needs_extra_headers_, ext_func_id);
     std::vector<Output> out = builder.VisitExpr(function->body);
     code_stream_ << builder.JIT(out);
     func_names_.push_back(ext_func_id);
@@ -335,7 +622,7 @@ class CodegenN64Module {
     os << code_stream_.str();
     std::string code = os.str();
 
-    VLOG(1) << "CodegenCModule generated:" << std::endl << code;
+    VLOG(1) << "CodegenN64Module generated:" << std::endl << code;
 
     // Create a CSource module
     const auto* pf = runtime::Registry::Get("runtime.CSourceModuleCreate");

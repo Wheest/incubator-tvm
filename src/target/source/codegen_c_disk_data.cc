@@ -69,29 +69,13 @@ void MainFuncVisitorState::VisitStmt_(const LetStmtNode* op, CodeGenC* codegen) 
       }
     } else {
       std::ostringstream stream;
-      auto op_call = op->value.as<CallNode>();
-      // auto op_var = op->var.get();
 
-      if (auto opt_call_op = op_call->op.as<Op>()) {
-        if (op_call->op.same_as(builtin::address_of())) {
-          const BufferLoadNode* load = op_call->args[0].as<BufferLoadNode>();
-          // int64_t num_elements = 1;
+      codegen->stream << "  static " << dtype << "* " << var_name
+                      << "; // Declare without immediate initialization \n";
 
-          Array<PrimExpr> shape;
-          Array<PrimExpr> shape2 = load->buffer->shape;
-
-          ICHECK(op_call->args.size() == 1 && load);
-          ICHECK_EQ(load->indices.size(), 1) << "CodeGenC only supports flat memory allocations.";
-
-          stream << "  static " << dtype;
-          stream << "* " << var_name << "; // Declare without immediate initialization \n";
-
-          // Open file to read binary data
-          // codegen->PrintIndent();
-          stream << "  if (read_file_into_memory(\"rom:/" << var_name << ".dat\", &" << var_name
-                 << ") != 0) return 0;\n\n";
-        }
-      }
+      // Open file to read binary data
+      stream << "  if (read_file_into_memory(\"rom:/" << var_name << ".dat\", &" << var_name
+             << ") != 0) return 0;\n\n";
       load_var_code_[var_name] += stream.str();
     }
   }

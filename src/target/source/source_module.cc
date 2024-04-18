@@ -32,6 +32,7 @@
 #include <tvm/runtime/registry.h>
 
 #include <algorithm>
+#include <climits>
 #include <functional>
 #include <numeric>
 #include <string>
@@ -411,6 +412,7 @@ class CSourceCrtMetadataModuleNode : public runtime::ModuleNode {
     if (array.DataType().is_float() && array.DataType().bits() == 32) {
       std::vector<float> out_data(nelems);
       array.CopyToBytes(out_data.data(), nelems * sizeof(float));
+      save_to_csv(out_data, "./csvdata/" + name + "_fp32_size_" + std::to_string(nelems) + ".csv");
       saveFloat32DataInBigEndian(outFile, reinterpret_cast<const char*>(out_data.data()),
                                  out_data.size() * sizeof(float));
     } else if (array.DataType().is_int() && array.DataType().bits() == 16) {

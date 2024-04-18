@@ -22,6 +22,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import logging
 
 import tvm
+from tvm import relay
 from tvm.target import Target
 from tvm.relay import transform
 from tvm.relay.build_module import bind_params_by_name
@@ -47,8 +48,15 @@ def depthwise_conv2d(attrs, args):
     Relay does not have a depthwise conv2d operator whilst N64 does. We simply
     separate the checks for depthwise for clarity.
     """
-    print("Depthwise conv!")
+    print("\nDepthwise conv!")
     kernel_typ = args[1].checked_type
+    # print("hey args:", args)
+    print("groups:", attrs.groups)
+    if attrs.groups == 1:
+        raise ValueError("Error: groups is 1")
+
+    print("kernel shape", kernel_typ.shape)
+    print()
     # Only supports 3x3 depthwise
     # if (
     #     kernel_typ.shape[0] not in [3]
@@ -59,6 +67,52 @@ def depthwise_conv2d(attrs, args):
     #     return False
 
     return True
+
+
+def get_shape(tensor):
+    """Get tensor's shape."""
+    if isinstance(tensor, relay.expr.Var):
+        return tensor.type_annotation.concrete_shape
+    if isinstance(tensor, relay.expr.Constant):
+        return tensor.data.shape
+    if isinstance(tensor, tvm.ir.tensor_type.TensorType):
+        return tensor.concrete_shape
+    if isinstance(tensor, tvm.ir.container.Array):
+        return tensor[-1].shape
+    if isinstance(tensor, relay.expr.Call):
+        if tensor.op.name == "multiply":
+            return tensor.type_args[0].shape
+        return tensor.checked_type.shape
+    raise TypeError(f"Unsupport data type: {type(tensor)}")
+
+
+def legalize_depth_conv(attrs, inputs, types):
+    """Legalize group conv / conv_transpose calculation.
+    Alter weight layout from OIHW to GOIHW / IOHW to GIOHW"""
+    if attrs.data_layout != "NHWC":
+        raise ValueError(f"Error: data_layout is not NHWC ({attrs.data_layout})")
+    if attrs.kernel_layout != "HWIO":
+        raise ValueError(f"Error: kernel_layout is not HWIO ({attrs.kernel_layout})")
+
+    groups = attrs.groups
+    data, weight = inputs
+    H, W, IC, OC = get_shape(weight)
+    if groups == 1 or groups != OC:
+        print("groups", groups, "oc", OC)
+        if "Transpose" not in type(attrs).__name__:
+            return relay.nn.conv2d(data, weight, **attrs)
+        return relay.nn.conv2d_transpose(data, weight, **attrs)
+
+    assert IC == 1
+    assert H == W == 3
+    new_attrs = dict(attrs)
+
+    sections = int(OC // 8)  # assume SIMD depth is 8
+    split_weights = relay.split(weight, indices_or_sections=sections, axis=-1)
+    weight = relay.stack(split_weights, axis=0)
+    weight = relay.reshape(weight, (H, W, IC, OC))
+
+    return relay.nn.conv2d(data, weight, **new_attrs)
 
 
 @tvm.ir.register_op_attr("nn.conv2d", "target.n64")

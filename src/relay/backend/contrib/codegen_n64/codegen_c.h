@@ -18,11 +18,11 @@
  */
 
 /*!
- * \file src/relay/backend/contrib/codegen_c/codegen_c.h
+ * \file src/relay/backend/contrib/codegen_n64/codegen_c.h
  * \brief The base class for external codegen tools.
  */
-#ifndef TVM_RELAY_BACKEND_CONTRIB_CODEGEN_C_CODEGEN_C_H_
-#define TVM_RELAY_BACKEND_CONTRIB_CODEGEN_C_CODEGEN_C_H_
+#ifndef TVM_RELAY_BACKEND_CONTRIB_CODEGEN_N64_CODEGEN_C_H_
+#define TVM_RELAY_BACKEND_CONTRIB_CODEGEN_N64_CODEGEN_C_H_
 
 #include <tvm/relay/expr.h>
 #include <tvm/relay/function.h>
@@ -444,4 +444,4 @@ transform::Pass N64CompilerPass();
 }  // namespace relay
 }  // namespace tvm
 
-#endif  // TVM_RELAY_BACKEND_CONTRIB_CODEGEN_C_CODEGEN_C_H_
+#endif  // TVM_RELAY_BACKEND_CONTRIB_CODEGEN_N64_CODEGEN_C_H_
