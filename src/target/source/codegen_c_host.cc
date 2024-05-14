@@ -58,6 +58,7 @@ void CodeGenCHost::Init(bool output_ssa, bool emit_asserts, bool emit_fwd_func_d
   decl_stream << "#include <stdbool.h>\n";
   decl_stream << "#include <stdlib.h>\n";
   decl_stream << "#include <malloc.h>\n";
+  decl_stream << "#include <libdragon.h>\n";
   decl_stream << "#define ROUND_UP(x, s) (((x) + ((s)-1)) & ~((s)-1))\n";
   if (devices.find("ethos-u") != devices.end()) {
     decl_stream << "#include <tvm_ethosu_runtime.h>\n";

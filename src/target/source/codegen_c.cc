@@ -225,8 +225,8 @@ void CodeGenC::AddMainHelperFunctions() {
   this->PrintIndent();
   stream << "  size_t " << dtype << "_count = size / sizeof(" << dtype << ");\n";
   this->PrintIndent();
-  stream << "  *data_ptr = (" << dtype << "*)memalign(16, ROUND_UP(" << dtype << "_count * sizeof("
-         << dtype << "), 16));\n";
+  stream << "  *data_ptr = malloc_uncached_aligned(16, ROUND_UP(void_count * sizeof(" << dtype
+         << "), 16));\n";
   this->PrintIndent();
   stream << "  if (!*data_ptr) {\n";
   this->PrintIndent();
@@ -245,7 +245,7 @@ void CodeGenC::AddMainHelperFunctions() {
   this->PrintIndent();
   stream << "    printf(\"Error reading file\\n\");\n";
   this->PrintIndent();
-  stream << "    free(*data_ptr);\n";
+  stream << "    free_uncached(*data_ptr);\n";
   this->PrintIndent();
   stream << "    fclose(file);\n";
   this->PrintIndent();

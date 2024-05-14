@@ -51,14 +51,14 @@ struct GenerateBodyOutput {
   Array<String> headers;
 };
 
-class CSourceModuleCodegenBase {
+class N64SourceModuleCodegenBase {
  public:
-  CSourceModuleCodegenBase() = default;
-  virtual ~CSourceModuleCodegenBase() = default;
+  N64SourceModuleCodegenBase() = default;
+  virtual ~N64SourceModuleCodegenBase() = default;
 
   /*!
    * \brief Create a runtime module for the external library. For example, it
-   * could be a CSourceModule that can be directly compiled and linked together
+   * could be a N64SourceModule that can be directly compiled and linked together
    * with a DSOModule, or a json style module that emitts a json artifact that
    * is able to be executed by a customized json runtime.
    *
@@ -66,13 +66,13 @@ class CSourceModuleCodegenBase {
    *
    * \return A runtime module.
    */
-  virtual runtime::Module CreateCSourceModule(const ObjectRef& ref) = 0;
+  virtual runtime::Module CreateN64SourceModule(const ObjectRef& ref) = 0;
 };
 
 // The base class to generate the declaration functions in C.
-class CodegenCBase {
+class CodegenN64Base {
  public:
-  virtual ~CodegenCBase() {}
+  virtual ~CodegenN64Base() {}
 
  protected:
   /*! \brief Print indents using spaces. */
@@ -98,17 +98,25 @@ class CodegenCBase {
   /*!
    * \brief Creates a runtime function header
    */
-  void PrintRuntimeFunctionHeader(std::string func_name) {
+  void PrintRuntimeFunctionHeader(std::string func_name, const Array<Var>& args,
+                                  const std::vector<Output>& outs) {
     code_stream_ << "#ifdef __cplusplus\n";
     code_stream_ << "extern \"C\" {\n";
     code_stream_ << "#endif\n";
+
+    // We want something like:
+    // TVM_DLL int32_t tvmgen_default_n64_main_0(int8_t *input, int8_t *weights,
+    //                                          int32_t *outs) {\n
     code_stream_ << "TVM_DLL int32_t ";
     code_stream_ << func_name << "(";
-    code_stream_ << "TVMValue* args, ";
-    code_stream_ << "int* type_code, ";
-    code_stream_ << "int num_args, ";
-    code_stream_ << "TVMValue* out_value, ";
-    code_stream_ << "int* out_type_code) {\n";
+    for (size_t i = 0; i < args.size(); i++) {
+      code_stream_ << GetDtypeString(args[i]) << " *arg" << i << ", ";
+    }
+    for (size_t i = 0; i < outs.size() - 1; i++) {
+      code_stream_ << outs[i].dtype << "* ret" << i << ",\n";
+      code_stream_ << "\t";
+    }
+    code_stream_ << outs.back().dtype << "* ret" << outs.size() - 1 << ") {\n";
   }
 
   /*!
@@ -168,14 +176,14 @@ class CodegenCBase {
 
     code_stream_ << "int " << func_name << "_wrapper_(";
     for (size_t i = 0; i < args.size(); i++) {
-      code_stream_ << "DLTensor* arg" << i << ",\n";
+      code_stream_ << GetDtypeString(args[i]) << "* arg" << i << ",\n";
       code_stream_ << "\t";
     }
     for (size_t i = 0; i < outs.size() - 1; i++) {
-      code_stream_ << "DLTensor* out" << i << ",\n";
+      code_stream_ << outs[i].dtype << "* out" << i << ",\n";
       code_stream_ << "\t";
     }
-    code_stream_ << "DLTensor* out" << outs.size() - 1 << ") {\n";
+    code_stream_ << outs.back().dtype << "* out" << outs.size() - 1 << ") {\n";
 
     EnterScope();
 
@@ -187,7 +195,7 @@ class CodegenCBase {
         code_stream_ << "arg" << i << ",\n";
       } else {
         const auto& dtype_str = GetDtypeString(args[i]);
-        code_stream_ << "(" << dtype_str << "*)(arg" << i << "->data),\n";
+        code_stream_ << "(" << dtype_str << "*)(arg" << i << "),\n";
       }
       PrintIndents();
     }
@@ -195,14 +203,14 @@ class CodegenCBase {
       if (pass_dl_tensor) {
         code_stream_ << "out" << i << ",\n";
       } else {
-        code_stream_ << "(" << outs[i].dtype << "*)(out" << i << "->data),\n";
+        code_stream_ << "(" << outs[i].dtype << "*)(out" << i << "),\n";
       }
       PrintIndents();
     }
     if (pass_dl_tensor) {
       code_stream_ << "out" << outs.size() - 1 << ");\n";
     } else {
-      code_stream_ << "(" << outs.back().dtype << "*)(out" << outs.size() - 1 << "->data));\n";
+      code_stream_ << "(" << outs.back().dtype << "*)(out" << outs.size() - 1 << "));\n";
     }
     PrintIndents();
     code_stream_ << "return 0;\n";
@@ -210,14 +218,14 @@ class CodegenCBase {
     code_stream_ << "}\n\n";
 
     // Create the external function
-    PrintRuntimeFunctionHeader(func_name);
+    PrintRuntimeFunctionHeader(func_name, args, outs);
     EnterScope();
-    for (size_t i = 0; i < args.size(); i++) {
-      PrintArgToData(i);
-    }
-    for (size_t i = 0; i < outs.size(); i++) {
-      PrintRetToData(args.size() + i);
-    }
+    // for (size_t i = 0; i < args.size(); i++) {
+    //   PrintArgToData(i);
+    // }
+    // for (size_t i = 0; i < outs.size(); i++) {
+    //   PrintRetToData(args.size() + i);
+    // }
     PrintIndents();
     code_stream_ << func_name << "_wrapper_(";
     for (size_t i = 0; i < args.size(); i++) {
@@ -226,7 +234,7 @@ class CodegenCBase {
     for (size_t i = 0; i < outs.size() - 1; i++) {
       code_stream_ << "ret" << args.size() + i << ",";
     }
-    code_stream_ << "ret" << args.size() + outs.size() - 1 << ");\n";
+    code_stream_ << "ret" << outs.size() - 1 << ");\n";
     PrintIndents();
     code_stream_ << "return 0;\n";
     ExitScope();
@@ -367,9 +375,11 @@ class CodegenCBase {
     } else if (runtime::TypeMatch(ttype->dtype, kDLBfloat, 16)) {
       dtype = "bfloat";
     } else if (runtime::TypeMatch(ttype->dtype, kDLInt, 32)) {
-      dtype = "int";
+      dtype = "int32_t";
     } else if (runtime::TypeMatch(ttype->dtype, kDLInt, 64)) {
       dtype = "int64_t";
+    } else if (runtime::TypeMatch(ttype->dtype, kDLInt, 8)) {
+      dtype = "int8_t";
     } else {
       LOG(FATAL) << "Unsupported dtype " << ttype->dtype;
     }

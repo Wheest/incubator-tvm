@@ -427,6 +427,12 @@ class CSourceCrtMetadataModuleNode : public runtime::ModuleNode {
       save_to_csv(out_data, "./csvdata/" + name + "_int32_size_" + std::to_string(nelems) + ".csv");
       saveIntDataInBigEndian<int32_t>(outFile, reinterpret_cast<const char*>(out_data.data()),
                                       out_data.size() * array.DataType().bytes());
+    } else if (array.DataType().is_int() && array.DataType().bits() == 8) {
+      std::vector<int8_t> out_data(nelems);
+      array.CopyToBytes(out_data.data(), nelems * array.DataType().bytes());
+      save_to_csv(out_data, "./csvdata/" + name + "_int8_size_" + std::to_string(nelems) + ".csv");
+      saveIntDataInBigEndian<int8_t>(outFile, reinterpret_cast<const char*>(out_data.data()),
+                                     out_data.size() * array.DataType().bytes());
     } else {
       LOG(FATAL) << "Unsupported datatype with " << array.DataType().bits()
                  << " bits (type code enum is: " << array.DataType().code() << "\n";

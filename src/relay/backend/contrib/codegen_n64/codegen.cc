@@ -26,6 +26,7 @@
 #include <sstream>
 #include <string>
 
+#include "../../../../target/source/codegen_c_host.h"
 #include "../../../op/op_common.h"
 #include "../../../qnn/utils.h"
 #include "../../../transforms/compiler_function_utils.h"
@@ -54,7 +55,7 @@ Target GetN64CompilerTarget() {
  * For testing and demonstration only, only a few binary operators are supported.
  */
 class CodegenN64 : public backend::MemoizedExprTranslator<std::vector<Output>>,
-                   public CodegenCBase {
+                   public CodegenN64Base {
  public:
   CodegenN64(std::unordered_map<std::string, runtime::NDArray>* const_name_to_constant,
              Array<String>* const_names, bool* needs_extra_headers, std::string ext_func_id)
@@ -130,7 +131,8 @@ class CodegenN64 : public backend::MemoizedExprTranslator<std::vector<Output>>,
       ext_func_body_.insert(ext_func_body_.begin(), checker);
     }
 
-    ICHECK(dtype == "float" || dtype == "int") << "Only float and int are supported for now.";
+    ICHECK(dtype == "float" || dtype == "int32_t")
+        << "Only int32_t is supported for now (your type:" << dtype << ")";
     output.dtype = dtype;
 
     std::string const_var_name = CreateConstVar(ext_func_id_, const_id);
@@ -145,25 +147,27 @@ class CodegenN64 : public backend::MemoizedExprTranslator<std::vector<Output>>,
     std::ostringstream decl_stream;
     std::ostringstream buf_stream;
 
-    if (backend::IsOp(call, "nn.conv2d")) {
-      std::cout << "Wagwan, we have a conv2d op!" << std::endl;
+    if (backend::IsOp(call, "qnn.conv2d")) {
       return Conv2d(call);
+    } else if (backend::IsOp(call, "nn.conv2d")) {
+      return Conv2d(call);
+      // LOG(FATAL) << "Not quantized conv2d is not supported for RSP (yet!)";
     }
 
     std::string func_name = ext_func_id_ + "_" + std::to_string(func_idx++);
 
     // Make function declaration
-    macro_stream << "CSOURCE_BINARY_OP_" << call->args.size() << "D(" << func_name << ", ";
+    // macro_stream << "CSOURCE_BINARY_OP_" << call->args.size() << "D(" << func_name << ", ";
 
-    if (backend::IsOp(call, "add")) {
-      macro_stream << "+";
-    } else if (backend::IsOp(call, "subtract")) {
-      macro_stream << "-";
-    } else if (backend::IsOp(call, "multiply")) {
-      macro_stream << "*";
-    } else {
-      LOG(FATAL) << "Unrecognized op";
-    }
+    // if (backend::IsOp(call, "add")) {
+    //   macro_stream << "+";
+    // } else if (backend::IsOp(call, "subtract")) {
+    //   macro_stream << "-";
+    // } else if (backend::IsOp(call, "multiply")) {
+    //   macro_stream << "*";
+    // } else {
+    LOG(FATAL) << "Unrecognized op";
+    // }
 
     auto in_shape = backend::GetShape(call->args[0]->checked_type());
     for (size_t i = 0; i < in_shape.size(); ++i) {
@@ -213,6 +217,53 @@ class CodegenN64 : public backend::MemoizedExprTranslator<std::vector<Output>>,
     output.need_copy = true;
     output.size = out_size;
     return {output};
+  }
+
+  std::pair<int, int> get_partition_height(std::vector<int> in_shape, int padding, int stride,
+                                           int out_w) {
+    int in_w = in_shape[2];
+    int in_h = in_shape[1];
+    int in_dbytes = 1;
+    int out_dbytes = 4;
+    int kdim_h = 3;  // Kernel height dimension
+    int kmem = 3 * 3 * 8 * in_dbytes;
+
+    int max_height = 3;
+    int curr_mem = max_height * in_w * 8 * in_dbytes;
+    int new_oh = (max_height - kdim_h + 2 * padding) / stride + 1;
+    int omem_new = new_oh * out_w * 8 * out_dbytes;
+    // Adjust overhead as per your environment specifics
+    int max_mem = (4 * 1024) - 20;  // Total available memory - overhead
+    int spare_room = max_mem - (kmem + omem_new);
+
+    if (curr_mem > spare_room) {
+      LOG(FATAL)
+          << "Cannot fit even one horizontal strip of input in the RSP memory, good luck with "
+             "your special case implementation ("
+          << curr_mem << " < " << spare_room << ")";
+    }
+
+    while ((kmem + curr_mem + omem_new) <= max_mem && max_height < (in_h + 2 * padding)) {
+      max_height++;
+      curr_mem = max_height * (in_w + 2 * padding) * 8 * in_dbytes;
+      new_oh = (std::min((in_h + 2 * padding), max_height) - kdim_h) / stride + 1;
+      omem_new = new_oh * out_w * 8 * out_dbytes;
+      spare_room = max_mem - (kmem + omem_new);
+    }
+
+    if ((kmem + curr_mem + omem_new) > max_mem) {
+      max_height--;
+      curr_mem = max_height * (in_w + 2 * padding) * 8 * in_dbytes;
+      new_oh = (std::min((in_h + 2 * padding), max_height) - kdim_h) / stride + 1;
+      omem_new = new_oh * out_w * 8 * out_dbytes;
+    }
+
+    // Example output to verify variables at the end
+    std::cout << "Final max height: " << max_height << std::endl;
+    std::cout << "Final output_height: " << new_oh << std::endl;
+    std::cout << "Final current memory: " << curr_mem << std::endl;
+    std::cout << "Final output memory: " << omem_new << std::endl;
+    return std::make_pair(max_height, new_oh);
   }
 
   std::vector<Output> Conv2d(const CallNode* call) {
@@ -268,11 +319,17 @@ class CodegenN64 : public backend::MemoizedExprTranslator<std::vector<Output>>,
       out_shape_vec.push_back(out_shape[i]);
     }
 
-    int input_partition_height = 4;
-    int output_partition_height = 4;
-    macro_stream << input_partition_height << ", " << in_shape[1] << ", " << in_shape[2] << ", "
-                 << in_shape[3] << ", " << out_shape[1] << ", " << out_shape[2] << ", 3, 3, "
-                 << output_partition_height << ", " << pad << ", " << stride_h;
+    // int input_partition_height = 4;
+    // int output_partition_height = 4;
+
+    std::pair<int, int> partition_height =
+        get_partition_height(in_shape, pad, stride_h, out_shape[2]);
+    macro_stream << "/*input_partition_height=*/" << partition_height.first << ", /*in_h=*/"
+                 << in_shape[1] << ", /*in_w=*/" << in_shape[2] << ", /*in_c=*/" << in_shape[3]
+                 << ", /*out_h=*/" << out_shape[1] << ", /*out_w=*/" << out_shape[2]
+                 << ", /*k_h=*/3, /*k_w=*/3, "
+                 << "/*output_partition_height=*/" << partition_height.second << ", /*pad=*/" << pad
+                 << ", /*stride=*/" << stride_h;
     macro_stream << ");";
     func_decl_.push_back(macro_stream.str());
 
@@ -280,7 +337,7 @@ class CodegenN64 : public backend::MemoizedExprTranslator<std::vector<Output>>,
     bool first = true;
     decl_stream << func_name << "(";
     std::string out_buff = "out0";
-    for (size_t i = 0; i < call->args.size(); ++i) {
+    for (size_t i = 0; i < 2; ++i) {
       auto res = VisitExpr(call->args[i]);
       for (auto out : res) {
         if (!first) {
@@ -298,7 +355,6 @@ class CodegenN64 : public backend::MemoizedExprTranslator<std::vector<Output>>,
 
     decl_stream << ", " << out_buff << ");";
 
-    decl_stream << "\n  printf(\"Hello, World!\\n\");";
     ext_func_body_.push_back(decl_stream.str());
 
     // Update output buffer
@@ -351,7 +407,7 @@ class CodegenN64Module {
   CodegenN64Module(Target target, IRModule mod)
       : target_(std::move(target)), mod_(std::move(mod)) {}
 
-  runtime::Module CreateCSourceModule() {
+  runtime::Module CreateN64SourceModule() {
     std::cout << "Hey we are in CreateCSourceModule" << std::endl;
     for (const auto& kv : mod_->functions) {
       if (const auto* function_node = GetN64CompilerFunctionNode(kv.second)) {
@@ -396,27 +452,10 @@ class CodegenN64Module {
 
     // Define some macros to help operator implementations.
     const char* operator_macro = R"op_macro(
-    #define CSOURCE_BINARY_OP_1D(p_ID_, p_OP_, p_DIM1_, p_DTYPE)       \
-      void p_ID_(p_DTYPE* a, p_DTYPE* b, p_DTYPE* out) {    \
-        for (int64_t i = 0; i < p_DIM1_; ++i) {                        \
-          out[i] = a[i] p_OP_ b[i];                                    \
-        }                                                              \
-      }
-
-    #define CSOURCE_BINARY_OP_2D(p_ID_, p_OP_, p_DIM1_, p_DIM2_, p_DTYPE)  \
-      void p_ID_(p_DTYPE* a, p_DTYPE* b, p_DTYPE* out) {        \
-        for (int64_t i = 0; i < p_DIM1_; ++i) {                            \
-          for (int64_t j = 0; j < p_DIM2_; ++j) {                          \
-            int64_t k = i * p_DIM2_ + j;                                   \
-            out[k] = a[k] p_OP_ b[k];                                      \
-          }                                                                \
-        }                                                                  \
-      }
-
-    #define CSOURCE_RSP_DEPTH_CONV2D_OP(p_ID_, p_INPUT_PARTITION_HEIGHT_, p_IN_H_, p_IN_W_, p_IN_C_, p_OUT_H_, p_OUT_W_, p_K_H_, p_K_W_, p_OUTPUT_PARTITION_HEIGHT_, p_PADDING_, p_STRIDE_) \
-      void p_ID_(int16_t *dest, int16_t *input_data, int16_t *weights) {   \
-        RSPDepthConvTiledPadded(dest, input_data, weights, p_INPUT_PARTITION_HEIGHT_, p_IN_H_, p_IN_W_, p_IN_C_, p_OUT_H_, p_OUT_W_, p_K_H_, p_K_W_, p_OUTPUT_PARTITION_HEIGHT_, p_PADDING_, p_STRIDE_); \
-      }
+#define CSOURCE_RSP_DEPTH_CONV2D_OP(p_ID_, p_INPUT_PARTITION_HEIGHT_, p_IN_H_, p_IN_W_, p_IN_C_, p_OUT_H_, p_OUT_W_, p_K_H_, p_K_W_, p_OUTPUT_PARTITION_HEIGHT_, p_PADDING_, p_STRIDE_) \
+  void p_ID_(int8_t *input_data, int8_t *weights, int32_t *dest) {   \
+    RSPDepthConvTiledPadded(dest, input_data, weights, p_INPUT_PARTITION_HEIGHT_, p_IN_H_, p_IN_W_, p_IN_C_, p_OUT_H_, p_OUT_W_, p_K_H_, p_K_W_, p_OUTPUT_PARTITION_HEIGHT_, p_PADDING_, p_STRIDE_); \
+  }
     )op_macro";
 
     os << operator_macro << "\n\n";
@@ -427,41 +466,40 @@ class CodegenN64Module {
   void Conv2dRSPHelpers(std::ostringstream& os) {
     // Emit the helper code for the conv2d operator
     const char* rsp_ucode_macro = R"ucode_macro(
-DEFINE_RSP_UCODE(rsp_simple);
-uint32_t vec_id;
+extern uint32_t vec_id;
 enum {
   DMAWeights = 0x0,
   DMAInputs = 0x1,
   DepthConv = 0x2,
+  SetArgs = 0x3,
 };
-void vec_init() {
-  rspq_init();
-  vec_id = rspq_overlay_register(&rsp_simple);
-}
-void vec_close() { rspq_overlay_unregister(vec_id); }
 )ucode_macro";
 
     os << rsp_ucode_macro << "\n\n";
 
     const char* copy_slice_to_full_with_stride_macro = R"copy_macro(
-void copy_slice_to_full_with_stride(int16_t *dest, int16_t *output_pad_part,
+void copy_slice_to_full_with_stride(int32_t *dest, int32_t *output_pad_part,
                                     int output_partition_height, int out_w,
                                     int slice_count, int in_depth,
                                     int depth_slice_num, size_t slice_depth,
                                     int max_output_parition_height) {
-  // Copies a slice into the final destination with the appropriate stride
+  // Copies a slice into the final destination with the appripriate stride
   // e.g., a slice of size 4x4x8 could be copied into a 4x4x16 destination
   // slice_depth should probably be the inner loop size (e.g., 8)
+  /* printf("Copying slice %d\n", slice_count); */
   for (int y = 0; y < max_output_parition_height; y++) {
     for (int x = 0; x < out_w; x++) {
       // Calculate the initial destination address with offsets and strided gaps
-      int16_t *dest_ptr =
+      int32_t *dest_ptr =
           &dest[slice_count * output_partition_height * out_w * in_depth +
                 (y * out_w + x) * in_depth + (depth_slice_num * slice_depth)];
+
+      int offset = y * out_w * slice_depth + x * slice_depth;
+      uint16_t *src = (uint16_t *)(output_pad_part + offset);
       for (int c = 0; c < slice_depth; c++) {
-        // Perform the copy operation with stride
-        dest_ptr[c] =
-            output_pad_part[y * out_w * slice_depth + x * slice_depth + c];
+        // Perform the copy operation with stride (and reconstruct the 32-bit
+        // values)
+        dest_ptr[c] = ((uint32_t)src[c] << 16) | src[c + 8];
       }
     }
   }
@@ -478,7 +516,7 @@ void copy_slice_to_full_with_stride(int16_t *dest, int16_t *output_pad_part,
 
     const char* generate_padded_slices_with_depth_slice_macro = R"generate_macro(
 void generate_padded_slices_with_depth_slice(
-    int16_t *data, int16_t *padded_input_partition, int start_h, int in_h,
+    int8_t *data, int8_t *padded_input_partition, int start_h, int in_h,
     int in_w, int in_depth, int max_slice_height, int padding, int overlap,
     int depth_slice // New parameter indicating which set of 8 channels to copy
 ) {
@@ -493,7 +531,7 @@ void generate_padded_slices_with_depth_slice(
 
   // Clear the slice area
   memset(padded_input_partition, 0,
-         sizeof(int16_t) * max_slice_height * (in_w + 2 * padding) * 8);
+         sizeof(int8_t) * max_slice_height * (in_w + 2 * padding) * 8);
 
   // Determine slice dimensions
   int actual_start = (start_h == 0) ? start_h : start_h - padding;
@@ -505,7 +543,7 @@ void generate_padded_slices_with_depth_slice(
   for (int h = actual_start; h < actual_end; ++h) {
     for (int w = 0; w < in_w; ++w) {
       for (int d = depth_start; d < depth_end; ++d) {
-        int16_t value = data[(h * in_w * in_depth) + (w * in_depth) + d];
+        int8_t value = data[(h * in_w * in_depth) + (w * in_depth) + d];
         int target_row = target_start_h + h - actual_start;
         int target_col = w + padding;
         int target_depth = d - depth_start;
@@ -522,7 +560,7 @@ void generate_padded_slices_with_depth_slice(
 
     const char* rsp_depth_conv_tiled_padded_macro = R"rsp_macro(
 static inline void
-RSPDepthConvTiledPadded(int16_t *dest, int16_t *input_data, int16_t *weights,
+RSPDepthConvTiledPadded(int32_t *dest, int8_t *input_data, int8_t *weights,
                         int input_partition_height, int in_h, int in_w,
                         int in_c, int out_h, int out_w, int k_h, int k_w,
                         int output_partition_height, int padding, int stride) {
@@ -532,17 +570,33 @@ RSPDepthConvTiledPadded(int16_t *dest, int16_t *input_data, int16_t *weights,
 
   // raise not implemented error if in_c is not 8
   if (in_c % 8 != 0) {
-    printf("Error: in_c must be divisible by 8\n");
+    printf("Error: in_c must be divisible 8\n");
     return;
   }
 
-  int16_t *input_pad_part = malloc_uncached_aligned(
-      8, input_partition_height * (in_w + 2 * padding) * 8 * sizeof(int16_t));
-  int16_t *output_pad_part = malloc_uncached_aligned(
-      8, output_partition_height * out_w * 8 * sizeof(int16_t));
-  int out_part_size = output_partition_height * out_w * 8;
+  const int wbytes = sizeof(int8_t);
+  const int in_bytes = sizeof(int8_t);
+  const int out_bytes = sizeof(int32_t);
+  int8_t *input_pad_part = malloc_uncached_aligned(
+      8, input_partition_height * (in_w + 2 * padding) * 8 * in_bytes);
+  int32_t *output_pad_part = malloc_uncached_aligned(
+      8, output_partition_height * out_w * 8 * out_bytes);
+  const int out_part_size = output_partition_height * out_w * 8;
+  const int in_part_size =
+      input_partition_height * (in_w + 2 * padding) * 8 * in_bytes;
+  const int w_part_size = k_h * k_w * 8 * wbytes;
 
-  int overlap = k_h - stride;
+  const int overlap = k_h - stride;
+  const int w_stride_slice = 8 * in_bytes * stride;
+  const int w_slide_byte_offset = 8 * in_bytes * (in_w + 2 * padding);
+  const int h_slide_byte_offset =
+      (k_w * 8 * in_bytes) - (in_bytes * 8) +
+      (stride - 1) * 8 * (in_h + 2 * padding) * in_bytes;
+
+  rspq_write(vec_id, SetArgs, output_partition_height, out_w, w_stride_slice,
+             w_slide_byte_offset, h_slide_byte_offset, w_part_size,
+             in_part_size);
+
   for (int depth_slice = 0; depth_slice < in_c / 8; depth_slice++) {
     int slice_count = 0;
     int remaining_out_values = out_h * out_w * 8; // Remaining values to copy
@@ -550,43 +604,50 @@ RSPDepthConvTiledPadded(int16_t *dest, int16_t *input_data, int16_t *weights,
 
     // Copy weights to the RSP once
     rspq_write(vec_id, DMAWeights,
-               PhysicalAddr(&weights[depth_slice * k_h * k_w * 8]));
+               PhysicalAddr(&weights[depth_slice * k_h * k_w * 8]),
+               w_part_size);
 
     // Generate first slice
-    generate_padded_slices_with_depth_slice(
-        input_data, (int16_t *)input_pad_part, 0, in_h, in_w, in_c,
-        input_partition_height, padding, overlap, depth_slice);
-    rspq_write(vec_id, DMAInputs, PhysicalAddr(input_pad_part));
+    generate_padded_slices_with_depth_slice(input_data, input_pad_part, 0, in_h,
+                                            in_w, in_c, input_partition_height,
+                                            padding, overlap, depth_slice);
+
+    // Copy-in the first slice
+    rspq_write(vec_id, DMAInputs, PhysicalAddr(input_pad_part), in_part_size);
+
     int start_h_next = input_partition_height - overlap;
 
     for (int start_h = 0; start_h < in_h;
          start_h += input_partition_height - overlap) {
-
       rspq_wait();
+
       // Process the padded partition on the RSP
-      rspq_write(vec_id, DepthConv, PhysicalAddr(output_pad_part));
+      rspq_write(vec_id, DepthConv, PhysicalAddr(output_pad_part),
+                 out_part_size * out_bytes);
       // Generate next slice while the current one is being
       // processed
       if (start_h_next <= in_h) {
         generate_padded_slices_with_depth_slice(
-            input_data, (int16_t *)input_pad_part, start_h_next, in_h, in_w,
-            in_c, input_partition_height, padding, overlap, depth_slice);
+            input_data, input_pad_part, start_h_next, in_h, in_w, in_c,
+            input_partition_height, padding, overlap, depth_slice);
         start_h_next += input_partition_height - overlap;
       }
 
       // Copy back the processed partition to the final outputs,
       // DMA the new input slice to the RSP at the same time
       rspq_wait();
-      rspq_write(vec_id, DMAInputs, PhysicalAddr(input_pad_part));
+      rspq_write(vec_id, DMAInputs, PhysicalAddr(input_pad_part), in_part_size);
 
       if (remaining_out_values < out_part_size) {
         // Cover the case where our final output slice is larger than required
         max_output_partition_height = remaining_out_values / (out_w * 8);
       }
+
       copy_slice_to_full_with_stride(
           dest, output_pad_part, output_partition_height, out_w, slice_count,
           in_c, depth_slice, 8, max_output_partition_height);
       remaining_out_values -= output_partition_height * out_w * 8;
+
       slice_count++;
     }
   }
@@ -626,8 +687,22 @@ RSPDepthConvTiledPadded(int16_t *dest, int16_t *input_data, int16_t *weights,
 
     // Create a CSource module
     const auto* pf = runtime::Registry::Get("runtime.CSourceModuleCreate");
-    ICHECK(pf != nullptr) << "Cannot find csource module to create the external runtime module";
-    return (*pf)(code, "c", func_names_, const_names_);
+    ICHECK(pf != nullptr) << "Cannot find N64source module to create the external runtime module";
+
+    // Print all the const names
+    for (const auto& name : const_names_) {
+      std::cout << "Const name: " << name << std::endl;
+    }
+    std::cout << "Const names size: " << const_names_.size() << std::endl;
+
+    for (const auto& name : func_names_) {
+      std::cout << "Func name: " << name << std::endl;
+    }
+    std::cout << "Func names size: " << func_names_.size() << std::endl;
+    // return (*pf)(code, "c", Array<String>{func_names_}, const_names_);
+    // return (*pf)(code, "c", Array<String>{func_names_}, const_names_);
+    return codegen::CSourceModuleCreate(code, "c", Array<String>{func_names_});
+    // return codegen::CSourceModuleCreate(code, "c", syms, variables);
   }
 
   /*! \brief "n64" Target with compilation options to use. */
@@ -659,7 +734,8 @@ tvm::transform::Pass N64CompilerImpl() {
 
     // Emit the C/C++ code and package it as a CSourceModule.
     CodegenN64Module codegen(target, mod);
-    runtime::Module runtime_mod = codegen.CreateCSourceModule();
+    runtime::Module runtime_mod = codegen.CreateN64SourceModule();
+    std::cout << "Runtime module created" << std::endl;
 
     // Capture the new runtime module.
     Array<runtime::Module> external_mods =
@@ -673,6 +749,8 @@ tvm::transform::Pass N64CompilerImpl() {
       ICHECK_EQ(const_name_to_constant.count(kv.first), 0);
       const_name_to_constant.Set(kv.first, kv.second);
     }
+
+    std::cout << "N64 compiler pretty much done" << std::endl;
 
     return WithAttrs(mod, {{tvm::attr::kExternalMods, external_mods},
                            {tvm::attr::kConstNameToConstant, const_name_to_constant}});

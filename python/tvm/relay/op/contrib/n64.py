@@ -91,8 +91,8 @@ def legalize_depth_conv(attrs, inputs, types):
     Alter weight layout from OIHW to GOIHW / IOHW to GIOHW"""
     if attrs.data_layout != "NHWC":
         raise ValueError(f"Error: data_layout is not NHWC ({attrs.data_layout})")
-    if attrs.kernel_layout != "HWIO":
-        raise ValueError(f"Error: kernel_layout is not HWIO ({attrs.kernel_layout})")
+    if attrs.kernel_layout not in ["HWIO", "HWOI"]:
+        raise ValueError(f"Error: kernel_layout is not HWIO or HWOI ({attrs.kernel_layout})")
 
     groups = attrs.groups
     data, weight = inputs
@@ -149,6 +149,40 @@ def _n64_conv2d_wrapper(expr):
         return False
 
 
+@tvm.ir.register_op_attr("qnn.conv2d", "target.n64")
+def _n64_qnn_conv2d_wrapper(expr):
+    """Check if the external N64 codegen for conv2d should be used."""
+    print(f"N64 RSP does support conv2d!.")
+    attrs, args = expr.attrs, expr.args
+    if attrs.data_layout != "NHWC":  # channels last only
+        # TODO force this
+        # return False
+        ...
+    if attrs.out_dtype != "int8" and attrs.out_dtype != "":  # int8 only
+        # TODO force this
+        ...
+    data_typ = args[0].checked_type
+    if len(data_typ.shape) != 4 or data_typ.shape[0] != 1 or data_typ.dtype != "float32":
+        ...
+        # return False
+    kernel_typ = args[1].checked_type
+    if len(kernel_typ.shape) != 4 or kernel_typ.dtype != "float32":
+        ...
+        # return False
+    is_depthwise = is_depthwise_conv2d(
+        data_typ.shape,
+        attrs["data_layout"],
+        kernel_typ.shape,
+        attrs["kernel_layout"],
+        attrs["groups"],
+    )
+
+    if is_depthwise:
+        return depthwise_conv2d(attrs, args)
+    else:
+        return False
+
+
 # TODO handle fusion
 #
 @register_pattern_table("n64")
@@ -162,11 +196,6 @@ def pattern_table():
     """
     n64_patterns = list()
     return n64_patterns
-
-
-@tvm.ir.register_op_attr("add", "target.n64")
-def _n64_add_wrapper(expr):
-    return True
 
 
 def partition_for_n64(

@@ -108,7 +108,7 @@ void MainFuncVisitorState::FreeArrays(const CallNode* op, CodeGenC* codegen, std
     // if it is, we will print the code to free it
     auto name = op->args[i].as<VarNode>()->name_hint;
     if (load_var_code_.count(name)) {
-      os << "  free(" << name << ");\n";
+      os << "  free_uncached(" << name << ");\n";
       os << "  " << name << " = NULL;\n ";
     }
   }
