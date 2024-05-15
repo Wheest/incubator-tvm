@@ -115,10 +115,52 @@ def legalize_depth_conv(attrs, inputs, types):
     return relay.nn.conv2d(data, weight, **new_attrs)
 
 
+def legalize_qnn_depth_conv(attrs, inputs, types):
+    """Legalize group conv / conv_transpose calculation.
+    Alter weight layout from OIHW to GOIHW / IOHW to GIOHW"""
+    if attrs.data_layout != "NHWC":
+        raise ValueError(f"Error: data_layout is not NHWC ({attrs.data_layout})")
+    if attrs.kernel_layout not in ["HWIO", "HWOI"]:
+        raise ValueError(f"Error: kernel_layout is not HWIO or HWOI ({attrs.kernel_layout})")
+
+    groups = attrs.groups
+    data, weight, input_zero_point, kernel_zero_point, input_scale, kernel_scale = inputs
+
+    if attrs.kernel_layout == "HWOI":
+        H, W, OC, IC = get_shape(weight)
+    else:
+        H, W, IC, OC = get_shape(weight)
+    if groups == 1 or groups != OC:
+        if "Transpose" not in type(attrs).__name__:
+            return relay.qnn.conv2d(*inputs, **attrs)
+        return relay.qnn.conv2d_transpose(*inputs, **attrs)
+
+    if input_zero_point.data.numpy() != -128:
+        raise ValueError(f"Error: input_zero_point is not -128 ({input_zero_point.data})")
+
+    assert IC == 1
+    assert H == W == 3
+    new_attrs = dict(attrs)
+
+    sections = int(OC // 8)  # assume SIMD depth is 8
+    if attrs.kernel_layout == "HWOI":
+        split_weights = relay.split(weight, indices_or_sections=sections, axis=-2)
+        weight = relay.stack(split_weights, axis=0)
+        weight = relay.reshape(weight, (H, W, OC, IC))
+    else:
+        split_weights = relay.split(weight, indices_or_sections=sections, axis=-1)
+        weight = relay.stack(split_weights, axis=0)
+        weight = relay.reshape(weight, (H, W, IC, OC))
+
+    # print(type(inputs))
+    return relay.qnn.conv2d(
+        data, weight, input_zero_point, kernel_zero_point, input_scale, kernel_scale, **new_attrs
+    )
+
+
 @tvm.ir.register_op_attr("nn.conv2d", "target.n64")
 def _n64_conv2d_wrapper(expr):
     """Check if the external N64 codegen for conv2d should be used."""
-    print(f"N64 RSP does support conv2d!.")
     attrs, args = expr.attrs, expr.args
     if attrs.data_layout != "NHWC":  # channels last only
         # TODO force this
@@ -142,7 +184,6 @@ def _n64_conv2d_wrapper(expr):
         attrs["kernel_layout"],
         attrs["groups"],
     )
-    print("hey is_depthwise", is_depthwise)
     if is_depthwise:
         return depthwise_conv2d(attrs, args)
     else:
@@ -152,7 +193,6 @@ def _n64_conv2d_wrapper(expr):
 @tvm.ir.register_op_attr("qnn.conv2d", "target.n64")
 def _n64_qnn_conv2d_wrapper(expr):
     """Check if the external N64 codegen for conv2d should be used."""
-    print(f"N64 RSP does support conv2d!.")
     attrs, args = expr.attrs, expr.args
     if attrs.data_layout != "NHWC":  # channels last only
         # TODO force this

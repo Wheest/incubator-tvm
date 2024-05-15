@@ -233,7 +233,7 @@ class CodegenN64 : public backend::MemoizedExprTranslator<std::vector<Output>>,
     int new_oh = (max_height - kdim_h + 2 * padding) / stride + 1;
     int omem_new = new_oh * out_w * 8 * out_dbytes;
     // Adjust overhead as per your environment specifics
-    int max_mem = (4 * 1024) - 20;  // Total available memory - overhead
+    int max_mem = (4 * 1024);  // Total available memory - overhead
     int spare_room = max_mem - (kmem + omem_new);
 
     if (curr_mem > spare_room) {
@@ -243,7 +243,8 @@ class CodegenN64 : public backend::MemoizedExprTranslator<std::vector<Output>>,
           << curr_mem << " < " << spare_room << ")";
     }
 
-    while ((kmem + curr_mem + omem_new) <= max_mem && max_height < (in_h + 2 * padding)) {
+    while ((kmem + curr_mem + omem_new) <= max_mem && max_height < (in_h + 2 * padding) &&
+           /*TODO this is a possible buggy requirement*/ curr_mem < 1024) {
       max_height++;
       curr_mem = max_height * (in_w + 2 * padding) * 8 * in_dbytes;
       new_oh = (std::min((in_h + 2 * padding), max_height) - kdim_h) / stride + 1;
@@ -251,7 +252,8 @@ class CodegenN64 : public backend::MemoizedExprTranslator<std::vector<Output>>,
       spare_room = max_mem - (kmem + omem_new);
     }
 
-    if ((kmem + curr_mem + omem_new) > max_mem) {
+    if ((kmem + curr_mem + omem_new) > max_mem ||
+        /*TODO this is a possible buggy requirement*/ curr_mem >= 1024) {
       max_height--;
       curr_mem = max_height * (in_w + 2 * padding) * 8 * in_dbytes;
       new_oh = (std::min((in_h + 2 * padding), max_height) - kdim_h) / stride + 1;
@@ -261,7 +263,7 @@ class CodegenN64 : public backend::MemoizedExprTranslator<std::vector<Output>>,
     // Example output to verify variables at the end
     std::cout << "Final max height: " << max_height << std::endl;
     std::cout << "Final output_height: " << new_oh << std::endl;
-    std::cout << "Final current memory: " << curr_mem << std::endl;
+    std::cout << "Final input memory: " << curr_mem << std::endl;
     std::cout << "Final output memory: " << omem_new << std::endl;
     return std::make_pair(max_height, new_oh);
   }
