@@ -436,6 +436,17 @@ class CodegenN64Base {
     return symbol + "_const_" + std::to_string(const_id);
   }
 
+  // Get a T from a constant represented by a NDArray.
+  template <typename T>
+  void AsConstant(const Expr& expr, T* out) {
+    *out = {0};
+    if (!expr->IsInstance<ConstantNode>()) {
+      LOG(FATAL) << "expected constant data";
+    }
+    runtime::NDArray data = Downcast<Constant>(expr)->data;
+    *out = *static_cast<T*>(data->data);
+  }
+
   /*! \brief The external function source code stream. */
   std::ostringstream code_stream_;
 

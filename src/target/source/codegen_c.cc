@@ -245,7 +245,7 @@ void CodeGenC::AddMainHelperFunctions() {
   this->PrintIndent();
   stream << "    printf(\"Error reading file\\n\");\n";
   this->PrintIndent();
-  stream << "    free_uncached(*data_ptr);\n";
+  stream << "   free_uncached(*data_ptr);\n";
   this->PrintIndent();
   stream << "    fclose(file);\n";
   this->PrintIndent();

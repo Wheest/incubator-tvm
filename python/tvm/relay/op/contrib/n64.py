@@ -48,25 +48,41 @@ def depthwise_conv2d(attrs, args):
     Relay does not have a depthwise conv2d operator whilst N64 does. We simply
     separate the checks for depthwise for clarity.
     """
-    print("\nDepthwise conv!")
+    data_typ = args[0].checked_type
     kernel_typ = args[1].checked_type
-    # print("hey args:", args)
-    print("groups:", attrs.groups)
-    if attrs.groups == 1:
-        raise ValueError("Error: groups is 1")
+    is_depthwise = is_depthwise_conv2d(
+        data_typ.shape,
+        attrs["data_layout"],
+        kernel_typ.shape,
+        attrs["kernel_layout"],
+        attrs["groups"],
+    )
+    if len(args) == 2:
+        data, weight = args
+    elif len(args) == 6:
+        data, weight, _, _, _, _ = args
+    else:
+        raise ValueError(f"Error: args length is not 2 or 6 ({len(args)})")
 
-    print("kernel shape", kernel_typ.shape)
-    print()
-    # Only supports 3x3 depthwise
-    # if (
-    #     kernel_typ.shape[0] not in [3]
-    #     or kernel_typ.shape[1] not in [3]
-    #     or kernel_typ.shape[0] != kernel_typ.shape[1]
-    # ):
-    #     print("Depthwise false :(")
-    #     return False
+    if not is_depthwise:
+        return False
+    else:
+        #  Only supports if the input channels are divisible by 8
+        if attrs.kernel_layout not in ["HWIO", "HWOI"]:
+            raise ValueError(f"Error: kernel_layout is not HWIO or HWOI ({attrs.kernel_layout})")
+        if attrs.kernel_layout == "HWOI":
+            H, W, OC, IC = get_shape(weight)
+        else:
+            H, W, IC, OC = get_shape(weight)
 
-    return True
+        if OC % 8 != 0:
+            return False
+
+        # Only supports 3x3 depthwise
+        if (H != W) or (H != 3):
+            return False
+
+        return True
 
 
 def get_shape(tensor):
@@ -98,7 +114,6 @@ def legalize_depth_conv(attrs, inputs, types):
     data, weight = inputs
     H, W, IC, OC = get_shape(weight)
     if groups == 1 or groups != OC:
-        print("groups", groups, "oc", OC)
         if "Transpose" not in type(attrs).__name__:
             return relay.nn.conv2d(data, weight, **attrs)
         return relay.nn.conv2d_transpose(data, weight, **attrs)
@@ -135,8 +150,8 @@ def legalize_qnn_depth_conv(attrs, inputs, types):
             return relay.qnn.conv2d(*inputs, **attrs)
         return relay.qnn.conv2d_transpose(*inputs, **attrs)
 
-    if input_zero_point.data.numpy() != -128:
-        raise ValueError(f"Error: input_zero_point is not -128 ({input_zero_point.data})")
+    # if input_zero_point.data.numpy() != -128:
+    #     raise ValueError(f"Error: input_zero_point is not -128 ({input_zero_point.data})")
 
     assert IC == 1
     assert H == W == 3
@@ -152,7 +167,6 @@ def legalize_qnn_depth_conv(attrs, inputs, types):
         weight = relay.stack(split_weights, axis=0)
         weight = relay.reshape(weight, (H, W, IC, OC))
 
-    # print(type(inputs))
     return relay.qnn.conv2d(
         data, weight, input_zero_point, kernel_zero_point, input_scale, kernel_scale, **new_attrs
     )
