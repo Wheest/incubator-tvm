@@ -393,20 +393,16 @@ class CSourceCrtMetadataModuleNode : public runtime::ModuleNode {
       if constexpr (std::is_integral_v<T> && !std::is_same_v<T, bool>) {
         // Cast to int before printing if T is an integral type (not considering bool)
         csv_file << static_cast<int>(data[i]);
-        std::cout << static_cast<int>(data[i]);
       } else {
         // Directly print if T is not an integral type
         csv_file << data[i];
-        std::cout << data[i];
       }
       // csv_file << data[i];
       // std::cout << data[i];
       if (i != data.size() - 1) {
         csv_file << ",";
-        std::cout << ",";
       }
     }
-    std::cout << std::endl;
     csv_file << std::endl;
     csv_file.close();
   }

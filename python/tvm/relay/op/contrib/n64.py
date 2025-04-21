@@ -150,6 +150,10 @@ def legalize_qnn_depth_conv(attrs, inputs, types):
             return relay.qnn.conv2d(*inputs, **attrs)
         return relay.qnn.conv2d_transpose(*inputs, **attrs)
 
+    # if the OC is not divisible by 8, return a normal conv2d
+    if OC % 8 != 0:
+        return relay.qnn.conv2d(*inputs, **attrs)
+
     # if input_zero_point.data.numpy() != -128:
     #     raise ValueError(f"Error: input_zero_point is not -128 ({input_zero_point.data})")
 
