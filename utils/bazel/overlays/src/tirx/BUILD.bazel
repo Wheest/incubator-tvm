@@ -9,20 +9,27 @@ COPTS = [
     "-fPIC",
     "-std=c++17",
     "-DTVM_INDEX_DEFAULT_I64=1",
+    "-faligned-allocation",
 ]
 
-# Make this path available for relative includes
-SRC_INCLUDES = ["-Iexternal/tvm++tvm_overlay+tvm-project/src"]
+# Include paths for TVM's relative includes:
+# - src/ for includes like "arith/file.h" and "../../src/arith/file.h"
+# - src/tirx/ for includes like "../../arith/file.h" from analysis/
+SRC_INCLUDES = [
+    "-Iexternal/tvm++tvm_overlay+tvm-project/src",
+    "-Iexternal/tvm++tvm_overlay+tvm-project/src/tirx",
+]
 
 cc_library(
     name = "tirx",
     srcs = glob(["**/*.cc"], allow_empty = True),
     hdrs = glob(["**/*.h"], allow_empty = True),
-    # Note: tirx has headers-only deps on arith (cyclic at link time, ok for headers)
     copts = COPTS + SRC_INCLUDES,
     deps = [
         "//:tvm_headers",
+        "//:tvm_internal_hdrs",  # For cross-module relative includes
         "//3rdparty/tvm-ffi:tvm_ffi",
+        "//src/arith:arith_hdrs",  # Headers only to break cycle (arith links to tirx)
         "//src/ir",
         "//src/node",
         "//src/runtime",

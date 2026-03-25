@@ -4,33 +4,67 @@ load("@rules_cc//cc:defs.bzl", "cc_library")
 
 package(default_visibility = ["//visibility:public"])
 
+# Filegroup for LLVM canonicalizer files (accessible from //src/target/llvm)
+filegroup(
+    name = "canonicalizer_llvm_srcs",
+    srcs = glob(["canonicalizer/llvm/*.cc"]),
+)
+
+filegroup(
+    name = "canonicalizer_llvm_hdrs",
+    srcs = glob(["canonicalizer/llvm/*.h"]),
+)
+
 COPTS = [
     "-Wall",
     "-fPIC",
     "-std=c++17",
     "-DTVM_INDEX_DEFAULT_I64=1",
+    "-faligned-allocation",
 ]
 
 # Make this path available for relative includes
 SRC_INCLUDES = ["-Iexternal/tvm++tvm_overlay+tvm-project/src"]
 
-# Core target infrastructure (non-LLVM codegen)
+# Headers-only target for cross-module includes
+# Note: canonicalizer/llvm/*.h are included here (just declarations, no LLVM deps)
+# but canonicalizer/llvm/*.cc are in //src/target/llvm (need LLVM)
 cc_library(
-    name = "target",
-    srcs = glob(
-        ["**/*.cc"],
-        exclude = ["llvm/**"],
-        allow_empty = True,
-    ),
+    name = "target_hdrs",
     hdrs = glob(
         ["**/*.h"],
-        exclude = ["llvm/**"],
+        exclude = [
+            "llvm/**",  # LLVM codegen headers go with llvm target
+            "spirv/**",  # SPIRV/Vulkan requires vulkan headers
+        ],
         allow_empty = True,
     ),
     copts = COPTS + SRC_INCLUDES,
     deps = [
         "//:tvm_headers",
         "//3rdparty/tvm-ffi:tvm_ffi",
+        "//src/runtime",  # For ../../runtime/spirv/spirv_shader.h includes
+    ],
+)
+
+# Core target infrastructure (non-LLVM codegen)
+cc_library(
+    name = "target",
+    srcs = glob(
+        ["**/*.cc"],
+        exclude = [
+            "llvm/**",
+            "canonicalizer/llvm/**",  # LLVM-specific implementations
+            "spirv/**",  # SPIRV/Vulkan requires vulkan headers
+            "source/codegen_opencl.cc",  # Depends on spirv
+            "opt/*_on.cc",  # Backend-specific implementations requiring SDKs
+            "datatype/posit/**",  # Requires universal posit library
+        ],
+        allow_empty = True,
+    ),
+    copts = COPTS + SRC_INCLUDES,
+    deps = [
+        ":target_hdrs",
         "//src/arith",
         "//src/ir",
         "//src/node",

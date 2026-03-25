@@ -34,12 +34,8 @@ def _tvm_configure_impl(repository_ctx):
     else:
         tvm_root = tvm_bazel_path.dirname.dirname
 
-    print("DEBUG: tvm_root = " + str(tvm_root))
-    print("DEBUG: tvm_root exists = " + str(tvm_root.exists))
-
     # Get overlay path
     overlay_path = repository_ctx.path(Label("@tvm//:overlays/BUILD.bazel")).dirname
-    print("DEBUG: overlay_path = " + str(overlay_path))
 
     # Symlink top-level files
     for item in ["LICENSE", "NOTICE"]:
@@ -52,7 +48,6 @@ def _tvm_configure_impl(repository_ctx):
         src = tvm_root.get_child(item)
         if src.exists:
             repository_ctx.symlink(src, item)
-            print("DEBUG: symlinked " + item)
 
     # Set up src/ directory
     _setup_src_directory(repository_ctx, tvm_root, overlay_path)
@@ -62,7 +57,6 @@ def _tvm_configure_impl(repository_ctx):
 
     # Root BUILD.bazel
     root_build = overlay_path.get_child("BUILD.bazel")
-    print("DEBUG: root BUILD exists = " + str(root_build.exists))
     repository_ctx.symlink(root_build, "BUILD.bazel")
 
     # Generate config header
@@ -72,19 +66,39 @@ def _tvm_configure_impl(repository_ctx):
     )
 
 def _setup_src_directory(repository_ctx, tvm_root, overlay_path):
-    """Set up src/ directory with symlinked sources and BUILD files."""
+    """Set up src/ directory with symlinked sources and BUILD files.
+
+    For directories that need BUILD files, we symlink individual files
+    rather than the whole directory, so we can add our BUILD.bazel.
+    """
     src_root = tvm_root.get_child("src")
     if not src_root.exists:
-        print("DEBUG: src_root does not exist: " + str(src_root))
         return
 
-    print("DEBUG: setting up src directory from " + str(src_root))
+    # Build set of top-level directories that need BUILD files
+    top_level_overlay_dirs = {}
+    nested_overlay_dirs = {}
+    for d in _SRC_OVERLAY_DIRS:
+        if "/" in d:
+            parts = d.split("/")
+            top_level_overlay_dirs[parts[0]] = True
+            nested_overlay_dirs[d] = True
+        else:
+            top_level_overlay_dirs[d] = True
 
-    # Symlink each subdirectory in src/
+    # Process each subdirectory in src/
     for entry in src_root.readdir():
         dest = "src/" + entry.basename
-        repository_ctx.symlink(entry, dest)
-        print("DEBUG: symlinked " + dest)
+        if entry.basename in top_level_overlay_dirs:
+            # This directory needs a BUILD file - symlink contents individually
+            _symlink_dir_contents_flat(repository_ctx, entry, dest, entry.basename, nested_overlay_dirs)
+        else:
+            # No BUILD file needed - symlink the whole directory
+            repository_ctx.symlink(entry, dest)
+
+    # Create src/src symlink for TVM's broken relative includes like "../../src/arith/..."
+    # These resolve to src/src/arith/... from src/tirx/transform/, so we need src/src -> src
+    repository_ctx.symlink(src_root, "src/src")
 
     # Add BUILD files for src subdirectories
     for subdir in _SRC_OVERLAY_DIRS:
@@ -93,15 +107,28 @@ def _setup_src_directory(repository_ctx, tvm_root, overlay_path):
             content = repository_ctx.read(overlay_build)
             dest = "src/" + subdir + "/BUILD.bazel"
             repository_ctx.file(dest, content)
-            print("DEBUG: wrote BUILD to " + dest)
+
+def _symlink_dir_contents_flat(repository_ctx, src_dir, dest_dir, parent_name, nested_dirs):
+    """Symlink directory contents, handling one level of nesting for nested overlay dirs."""
+    for entry in src_dir.readdir():
+        dest = dest_dir + "/" + entry.basename
+        # Skip any existing BUILD files in source
+        if entry.basename == "BUILD.bazel" or entry.basename == "BUILD":
+            continue
+        # Check if this is a nested subdir that needs a BUILD file (e.g., target/llvm)
+        nested_key = parent_name + "/" + entry.basename
+        if nested_key in nested_dirs:
+            # Symlink contents of this nested dir
+            for nested_entry in entry.readdir():
+                if nested_entry.basename not in ["BUILD.bazel", "BUILD"]:
+                    repository_ctx.symlink(nested_entry, dest + "/" + nested_entry.basename)
         else:
-            print("DEBUG: overlay BUILD not found: " + str(overlay_build))
+            repository_ctx.symlink(entry, dest)
 
 def _setup_3rdparty_directory(repository_ctx, tvm_root, overlay_path):
     """Set up 3rdparty/ directory with special handling for tvm-ffi."""
     third_party = tvm_root.get_child("3rdparty")
     if not third_party.exists:
-        print("DEBUG: 3rdparty does not exist")
         return
 
     # Symlink non-tvm-ffi directories directly
@@ -120,7 +147,6 @@ def _setup_3rdparty_directory(repository_ctx, tvm_root, overlay_path):
         if overlay_build.exists:
             content = repository_ctx.read(overlay_build)
             repository_ctx.file("3rdparty/tvm-ffi/BUILD.bazel", content)
-            print("DEBUG: wrote BUILD to 3rdparty/tvm-ffi/BUILD.bazel")
 
 def _generate_config_header(use_llvm, use_rpc):
     """Generate TVM configuration header."""

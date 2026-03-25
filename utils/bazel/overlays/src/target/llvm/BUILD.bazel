@@ -15,7 +15,7 @@ COPTS = [
     "-std=c++17",
     "-fno-rtti",
     "-DTVM_INDEX_DEFAULT_I64=1",
-    "-DTVM_LLVM_VERSION=190",  # LLVM 19.x
+    "-DTVM_LLVM_VERSION=220",  # LLVM 22.x (from mono repo commit)
     "-DNDEBUG=1",  # Required for LLVM
 ]
 
@@ -24,8 +24,8 @@ SRC_INCLUDES = ["-Iexternal/tvm++tvm_overlay+tvm-project/src"]
 
 cc_library(
     name = "llvm",
-    srcs = glob(["*.cc"]),
-    hdrs = glob(["*.h"]),
+    srcs = glob(["*.cc"]) + ["//src/target:canonicalizer_llvm_srcs"],
+    hdrs = glob(["*.h"]) + ["//src/target:canonicalizer_llvm_hdrs"],
     copts = COPTS + SRC_INCLUDES,
     deps = [
         "//:tvm_headers",
@@ -56,16 +56,10 @@ cc_library(
         "@llvm-project//llvm:Support",
         "@llvm-project//llvm:Target",
         "@llvm-project//llvm:TransformUtils",
-    ] + select({
-        # Platform-specific codegen backends
-        "@platforms//cpu:x86_64": [
-            "@llvm-project//llvm:X86AsmParser",
-            "@llvm-project//llvm:X86CodeGen",
-        ],
-        "@platforms//cpu:aarch64": [
-            "@llvm-project//llvm:AArch64AsmParser",
-            "@llvm-project//llvm:AArch64CodeGen",
-        ],
-        "//conditions:default": [],
-    }),
+        # TVM initializes all known targets, so include both for cross-compilation
+        "@llvm-project//llvm:AArch64AsmParser",
+        "@llvm-project//llvm:AArch64CodeGen",
+        "@llvm-project//llvm:X86AsmParser",
+        "@llvm-project//llvm:X86CodeGen",
+    ],
 )

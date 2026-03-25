@@ -9,10 +9,17 @@ COPTS = [
     "-fPIC",
     "-std=c++17",
     "-DTVM_INDEX_DEFAULT_I64=1",
+    "-faligned-allocation",  # Required for aligned new/delete
+    "-mmacosx-version-min=10.15",  # Required for std::filesystem
 ]
 
-# Make this path available for relative includes
-SRC_INCLUDES = ["-Iexternal/tvm++tvm_overlay+tvm-project/src"]
+# Make these paths available for relative includes
+# - src/ for includes like "../../arith/file.h"
+# - src/relax/transform/ for includes like "../../s_tir/..." (resolves via -I search)
+SRC_INCLUDES = [
+    "-Iexternal/tvm++tvm_overlay+tvm-project/src",
+    "-Iexternal/tvm++tvm_overlay+tvm-project/src/relax/transform",
+]
 
 cc_library(
     name = "relax",
@@ -26,6 +33,7 @@ cc_library(
         "//src/ir",
         "//src/node",
         "//src/runtime",
+        "//src/s_tir",
         "//src/support",
         "//src/te",
         "//src/tirx",

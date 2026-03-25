@@ -40,11 +40,7 @@ cc_library(
     }),
     hdrs = glob([
         "*.h",
-        "vm/*.h",
-        "memory/*.h",
-        "disco/*.h",
-        "minrpc/*.h",
-        "rpc/*.h",
+        "**/*.h",  # Include all subdirectory headers
     ], allow_empty = True),
     copts = COPTS + SRC_INCLUDES,
     includes = ["."],

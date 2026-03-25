@@ -9,14 +9,16 @@ COPTS = [
     "-fPIC",
     "-std=c++17",
     "-DTVM_INDEX_DEFAULT_I64=1",
+    "-faligned-allocation",
 ]
 
 # Make this path available for relative includes
 SRC_INCLUDES = ["-Iexternal/tvm++tvm_overlay+tvm-project/src"]
 
+# Headers-only target to break dependency cycle with tirx
+# tirx needs arith headers for compilation, arith needs tirx for linking
 cc_library(
-    name = "arith",
-    srcs = glob(["**/*.cc"], allow_empty = True),
+    name = "arith_hdrs",
     hdrs = glob(["**/*.h"], allow_empty = True),
     copts = COPTS + SRC_INCLUDES,
     deps = [
@@ -26,6 +28,16 @@ cc_library(
         "//src/node",
         "//src/runtime",
         "//src/support",
+        "//src/target:target_hdrs",  # For ../target/datatype/registry.h include
+    ],
+)
+
+cc_library(
+    name = "arith",
+    srcs = glob(["**/*.cc"], allow_empty = True),
+    copts = COPTS + SRC_INCLUDES,
+    deps = [
+        ":arith_hdrs",
         "//src/tirx",
     ],
 )

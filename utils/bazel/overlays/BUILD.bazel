@@ -120,3 +120,14 @@ TVM_SRC_COPTS = [
 
 # Export for use in subpackages
 exports_files(["tvm_config.h"])
+
+# Internal headers from src/ - for cross-module relative includes
+# TVM source uses many relative includes like "../target/datatype/registry.h"
+# This provides all internal headers so compilation can resolve these paths
+cc_library(
+    name = "tvm_internal_hdrs",
+    hdrs = glob([
+        "src/**/*.h",
+    ], allow_empty = True),
+    includes = ["src"],
+)
