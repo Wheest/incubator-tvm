@@ -1,0 +1,17 @@
+"""TVM Bazel overlay package.
+
+This directory contains the Bazel build system for TVM.
+Use MODULE.bazel for bzlmod or WORKSPACE.bazel for legacy builds.
+"""
+
+exports_files([
+    "configure.bzl",
+    "extensions.bzl",
+])
+
+# Export overlay BUILD files for the configure rule
+filegroup(
+    name = "overlay_files",
+    srcs = glob(["overlays/**/*.bazel"]),
+    visibility = ["//visibility:public"],
+)

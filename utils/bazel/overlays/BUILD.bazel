@@ -1,0 +1,122 @@
+"""Root BUILD file for TVM.
+
+This provides the main library targets:
+- //:libtvm_runtime - Runtime library only
+- //:libtvm - Full compiler with LLVM codegen
+"""
+
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# Main TVM compiler library (shared)
+cc_shared_library(
+    name = "libtvm",
+    deps = [":tvm"],
+    shared_lib_name = select({
+        "@platforms//os:macos": "libtvm.dylib",
+        "@platforms//os:linux": "libtvm.so",
+        "@platforms//os:windows": "tvm.dll",
+    }),
+)
+
+# Main TVM compiler library (static) - with LLVM
+cc_library(
+    name = "tvm",
+    deps = [
+        "//src/arith",
+        "//src/ir",
+        "//src/node",
+        "//src/relax",
+        "//src/runtime",
+        "//src/s_tir",
+        "//src/script",
+        "//src/support",
+        "//src/target",
+        "//src/target/llvm",
+        "//src/te",
+        "//src/tirx",
+        "//src/topi",
+    ],
+)
+
+# Main TVM compiler library (static) - without LLVM
+cc_library(
+    name = "tvm_no_llvm",
+    deps = [
+        "//src/arith",
+        "//src/ir",
+        "//src/node",
+        "//src/relax",
+        "//src/runtime",
+        "//src/s_tir",
+        "//src/script",
+        "//src/support",
+        "//src/target",
+        "//src/te",
+        "//src/tirx",
+        "//src/topi",
+    ],
+)
+
+# Runtime-only library (shared)
+cc_shared_library(
+    name = "libtvm_runtime",
+    deps = [":tvm_runtime"],
+    shared_lib_name = select({
+        "@platforms//os:macos": "libtvm_runtime.dylib",
+        "@platforms//os:linux": "libtvm_runtime.so",
+        "@platforms//os:windows": "tvm_runtime.dll",
+    }),
+)
+
+# Runtime-only library (static)
+cc_library(
+    name = "tvm_runtime",
+    deps = [
+        "//src/runtime",
+    ],
+)
+
+# TVM public headers
+cc_library(
+    name = "tvm_headers",
+    hdrs = glob(["include/tvm/**/*.h"]),
+    includes = ["include"],
+    deps = [
+        "//3rdparty/tvm-ffi:dlpack_headers",
+        "//3rdparty/tvm-ffi:tvm_ffi_headers",
+    ],
+)
+
+# Common compiler defines
+COPTS = [
+    "-Wall",
+    "-fPIC",
+    "-O2",
+    "-DTVM_INDEX_DEFAULT_I64=1",
+] + select({
+    "@platforms//os:macos": ["-faligned-new"],
+    "@platforms//os:linux": ["-faligned-new"],
+    "//conditions:default": [],
+})
+
+# Compiler-RT headers (for fp16 builtins)
+cc_library(
+    name = "compiler_rt_headers",
+    hdrs = glob(["3rdparty/compiler-rt/*.h"]),
+    includes = ["3rdparty/compiler-rt"],
+)
+
+# Shared copts for TVM source files
+# Provides src/ in include path for relative includes like ../support/
+TVM_SRC_COPTS = [
+    "-Wall",
+    "-fPIC",
+    "-std=c++17",
+    "-DTVM_INDEX_DEFAULT_I64=1",
+    "-faligned-allocation",
+]
+
+# Export for use in subpackages
+exports_files(["tvm_config.h"])

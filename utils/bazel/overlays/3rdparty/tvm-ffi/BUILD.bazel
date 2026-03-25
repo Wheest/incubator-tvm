@@ -1,0 +1,134 @@
+"""BUILD file for TVM FFI - Foreign Function Interface layer."""
+
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+COPTS = [
+    "-Wall",
+    "-fPIC",
+    "-std=c++17",
+]
+
+# DLPack headers (included within tvm-ffi)
+cc_library(
+    name = "dlpack_headers",
+    hdrs = glob(["3rdparty/dlpack/include/dlpack/**/*.h"]),
+    includes = ["3rdparty/dlpack/include"],
+)
+
+# TVM FFI headers
+cc_library(
+    name = "tvm_ffi_headers",
+    hdrs = glob(["include/tvm/ffi/**/*.h"]),
+    includes = ["include"],
+    deps = [
+        ":dlpack_headers",
+    ],
+)
+
+# Core FFI library
+cc_library(
+    name = "tvm_ffi",
+    srcs = glob(
+        ["src/ffi/*.cc"],
+        exclude = ["src/ffi/testing/**"],
+    ),
+    hdrs = glob(["src/ffi/*.h"]),
+    copts = COPTS,
+    deps = [
+        ":tvm_ffi_headers",
+        ":libbacktrace",
+    ],
+)
+
+# Extra FFI functionality (module loading, serialization, etc.)
+cc_library(
+    name = "tvm_ffi_extra",
+    srcs = glob(["src/ffi/extra/*.cc"]),
+    hdrs = glob(["src/ffi/extra/*.h"]),
+    copts = COPTS,
+    includes = ["src/ffi/extra"],
+    deps = [
+        ":tvm_ffi",
+    ],
+)
+
+# Libbacktrace for stack traces
+cc_library(
+    name = "libbacktrace",
+    srcs = [
+        "3rdparty/libbacktrace/atomic.c",
+        "3rdparty/libbacktrace/backtrace.c",
+        "3rdparty/libbacktrace/dwarf.c",
+        "3rdparty/libbacktrace/fileline.c",
+        "3rdparty/libbacktrace/mmapio.c",
+        "3rdparty/libbacktrace/mmap.c",
+        "3rdparty/libbacktrace/posix.c",
+        "3rdparty/libbacktrace/print.c",
+        "3rdparty/libbacktrace/read.c",
+        "3rdparty/libbacktrace/sort.c",
+        "3rdparty/libbacktrace/state.c",
+        "3rdparty/libbacktrace/simple.c",
+    ] + select({
+        "@platforms//os:macos": [
+            "3rdparty/libbacktrace/macho.c",
+        ],
+        "@platforms//os:linux": [
+            "3rdparty/libbacktrace/elf.c",
+        ],
+        "//conditions:default": [
+            "3rdparty/libbacktrace/unknown.c",
+        ],
+    }),
+    hdrs = [
+        "3rdparty/libbacktrace/backtrace.h",
+        "3rdparty/libbacktrace/internal.h",
+        "3rdparty/libbacktrace/filenames.h",
+    ],
+    copts = [
+        "-funwind-tables",
+        "-D_GNU_SOURCE",
+        "-DHAVE_DL_ITERATE_PHDR",
+        "-DHAVE_ATOMIC_FUNCTIONS",
+        "-DHAVE_DECL_STRNLEN=1",
+        "-DHAVE_MMAP=1",
+    ] + select({
+        "@platforms//os:macos": [
+            "-DHAVE_MACH_O_DYLD_H=1",
+        ],
+        "@platforms//os:linux": [
+            "-DHAVE_LINK_H=1",
+        ],
+        "//conditions:default": [],
+    }),
+    includes = ["3rdparty/libbacktrace"],
+    # Generate config.h
+    textual_hdrs = [":libbacktrace_config"],
+)
+
+genrule(
+    name = "libbacktrace_config",
+    outs = [
+        "3rdparty/libbacktrace/config.h",
+        "3rdparty/libbacktrace/backtrace-supported.h",
+    ],
+    cmd = """
+cat > $(location 3rdparty/libbacktrace/config.h) << 'EOF'
+/* Auto-generated config.h for libbacktrace */
+#define HAVE_STDINT_H 1
+#define HAVE_INTTYPES_H 1
+#define HAVE_SYNC_FUNCTIONS 1
+#define BACKTRACE_ELF_SIZE 64
+#define BACKTRACE_XCOFF_SIZE 64
+EOF
+
+cat > $(location 3rdparty/libbacktrace/backtrace-supported.h) << 'EOF'
+/* Auto-generated backtrace-supported.h */
+#define BACKTRACE_SUPPORTED 1
+#define BACKTRACE_USES_MALLOC 0
+#define BACKTRACE_SUPPORTS_THREADS 1
+#define BACKTRACE_SUPPORTS_DATA 1
+EOF
+""",
+)

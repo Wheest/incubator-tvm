@@ -1,0 +1,10 @@
+# Directories to ignore during Bazel builds
+build
+cmake
+ci
+docs
+apps
+tests
+rust
+.git
+.github

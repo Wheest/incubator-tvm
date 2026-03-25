@@ -1,0 +1,56 @@
+"""Bazel module definition for Apache TVM.
+
+This module provides native Bazel support for TVM, allowing users to build
+TVM with LLVM codegen support using their own hermetic LLVM dependency.
+
+Usage in your MODULE.bazel:
+
+    # Option 1: Local TVM checkout
+    bazel_dep(name = "tvm", version = "0.0.0")
+    local_path_override(
+        module_name = "tvm",
+        path = "path/to/tvm-bazel/utils/bazel",
+    )
+
+    tvm_overlay = use_extension("@tvm//:extensions.bzl", "tvm_overlay")
+    tvm_overlay.configure()
+    use_repo(tvm_overlay, "tvm-project")
+
+    # Option 2: Remote TVM source (recommended for production)
+    bazel_dep(name = "tvm", version = "0.0.0")
+    archive_override(
+        module_name = "tvm",
+        urls = ["https://github.com/apache/tvm/archive/..."],
+        strip_prefix = "tvm-.../utils/bazel",
+    )
+
+    # Fetch raw TVM source separately
+    http_archive(
+        name = "tvm-raw",
+        build_file_content = "# Empty",
+        urls = ["https://github.com/apache/tvm/archive/..."],
+        strip_prefix = "tvm-...",
+    )
+
+    tvm_overlay = use_extension("@tvm//:extensions.bzl", "tvm_overlay")
+    tvm_overlay.configure()
+    inject_repo(tvm_overlay, "tvm-raw")  # Connect raw source
+    use_repo(tvm_overlay, "tvm-project")
+
+    # Provide your hermetic LLVM (required)
+    bazel_dep(name = "llvm-project", version = "19.1.0")
+"""
+
+module(
+    name = "tvm",
+    version = "0.0.0",
+    compatibility_level = 1,
+)
+
+bazel_dep(name = "bazel_skylib", version = "1.7.1")
+bazel_dep(name = "rules_cc", version = "0.1.1")
+bazel_dep(name = "rules_python", version = "1.1.0")
+bazel_dep(name = "platforms", version = "0.0.10")
+
+# Note: Users must provide their own LLVM via their MODULE.bazel.
+# The TVM BUILD files will depend on @llvm-project targets.

@@ -1,0 +1,6 @@
+"""BUILD file for TVM public headers."""
+
+package(default_visibility = ["//visibility:public"])
+
+# This directory is included via the root //:tvm_headers target
+# No additional targets needed here

@@ -1,0 +1,75 @@
+"""Legacy WORKSPACE file for TVM.
+
+For bzlmod (recommended), use MODULE.bazel instead.
+
+Usage:
+1. Copy this WORKSPACE.bazel to your project
+2. Update the paths to point to your TVM checkout
+3. Provide your own LLVM (see below)
+
+Example:
+    local_repository(
+        name = "tvm",
+        path = "path/to/tvm-bazel/utils/bazel",
+    )
+
+    # You must provide your own hermetic LLVM
+    # See: https://github.com/aspect-build/llvm-project
+"""
+
+workspace(name = "tvm")
+
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+http_archive(
+    name = "bazel_skylib",
+    sha256 = "bc283cdfcd526a52c3201279cda4bc298652uj1a0bbd8a8af2f1f5d7d2a0f60",
+    urls = ["https://github.com/bazelbuild/bazel-skylib/releases/download/1.7.1/bazel-skylib-1.7.1.tar.gz"],
+)
+
+http_archive(
+    name = "rules_cc",
+    sha256 = "2037875b9a4456dce4a79d112a8ae885bbc4aad968e6587dca6e64f3a0900cdf",
+    strip_prefix = "rules_cc-0.0.9",
+    urls = ["https://github.com/bazelbuild/rules_cc/archive/refs/tags/0.0.9.tar.gz"],
+)
+
+http_archive(
+    name = "rules_python",
+    sha256 = "d70cd72a7a4880f0000a6346253414f74c5d9b12c2949539b9f857c3e7f9c33d",
+    strip_prefix = "rules_python-0.35.0",
+    url = "https://github.com/bazelbuild/rules_python/archive/refs/tags/0.35.0.tar.gz",
+)
+
+http_archive(
+    name = "platforms",
+    sha256 = "218efe8ee736d26a3572663b374a253c0b5f90f5f78a1cccd3c5fd4f6c0e3dbe",
+    urls = ["https://github.com/bazelbuild/platforms/releases/download/0.0.10/platforms-0.0.10.tar.gz"],
+)
+
+# Configure TVM overlay
+load("@tvm//:configure.bzl", "tvm_configure")
+
+tvm_configure(
+    name = "tvm-project",
+    use_llvm = True,
+    use_rpc = True,
+)
+
+# NOTE: Users must provide their own @llvm-project
+# Example using aspect-build/llvm-project:
+#
+# http_archive(
+#     name = "llvm-raw",
+#     build_file_content = "# Empty",
+#     sha256 = "...",
+#     strip_prefix = "llvm-project-...",
+#     urls = ["https://github.com/llvm/llvm-project/archive/..."],
+# )
+#
+# load("@llvm-raw//utils/bazel:configure.bzl", "llvm_configure")
+#
+# llvm_configure(
+#     name = "llvm-project",
+#     targets = ["X86", "AArch64"],
+# )

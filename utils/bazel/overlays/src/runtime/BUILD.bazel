@@ -1,0 +1,63 @@
+"""BUILD file for TVM runtime."""
+
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+COPTS = [
+    "-Wall",
+    "-fPIC",
+    "-std=c++17",
+    "-DTVM_INDEX_DEFAULT_I64=1",
+    "-faligned-allocation",
+]
+
+# Make this path available for relative includes
+SRC_INCLUDES = ["-Iexternal/tvm++tvm_overlay+tvm-project/src"]
+
+# Disco distributed sources - included on Linux/macOS
+DISCO_DISTRIBUTED_SRCS = glob(["disco/distributed/*.cc"])
+
+cc_library(
+    name = "runtime",
+    srcs = glob(
+        [
+            "*.cc",
+            "vm/*.cc",
+            "memory/*.cc",
+            "disco/*.cc",
+            "rpc/*.cc",
+        ],
+        exclude = [
+            "**/*_test.cc",
+            "disco/distributed/*.cc",  # Handled via select below
+        ],
+        allow_empty = True,
+    ) + select({
+        "@platforms//os:linux": DISCO_DISTRIBUTED_SRCS,
+        "@platforms//os:macos": DISCO_DISTRIBUTED_SRCS,
+        "//conditions:default": [],
+    }),
+    hdrs = glob([
+        "*.h",
+        "vm/*.h",
+        "memory/*.h",
+        "disco/*.h",
+        "minrpc/*.h",
+        "rpc/*.h",
+    ], allow_empty = True),
+    copts = COPTS + SRC_INCLUDES,
+    includes = ["."],
+    linkopts = select({
+        "@platforms//os:linux": ["-lpthread", "-ldl"],
+        "@platforms//os:macos": ["-lpthread"],
+        "//conditions:default": [],
+    }),
+    deps = [
+        "//:tvm_headers",
+        "//:compiler_rt_headers",
+        "//3rdparty/tvm-ffi:tvm_ffi",
+        "//3rdparty/tvm-ffi:tvm_ffi_extra",
+        "//src/support",
+    ],
+)

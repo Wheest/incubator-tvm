@@ -1,0 +1,25 @@
+"""BUILD file for TVM Python bindings."""
+
+load("@rules_python//python:defs.bzl", "py_library", "py_test")
+
+package(default_visibility = ["//visibility:public"])
+
+py_library(
+    name = "tvm",
+    srcs = glob(["tvm/**/*.py"]),
+    data = [
+        "//:libtvm",
+    ],
+    imports = ["."],
+    deps = [
+        # Users should add their Python deps here via a wrapper
+    ],
+)
+
+# Basic import test
+py_test(
+    name = "tvm_import_test",
+    srcs = ["tvm/__init__.py"],
+    main = "tvm/__init__.py",
+    deps = [":tvm"],
+)
