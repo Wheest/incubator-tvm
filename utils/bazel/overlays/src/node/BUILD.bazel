@@ -40,6 +40,6 @@ cc_library(
     deps = [
         "//:tvm_headers",
         "//3rdparty/tvm-ffi:tvm_ffi",
-        "//src/support",
+        "//src/support:support_runtime",  # Only needs headers (str_escape.h)
     ],
 )
