@@ -111,13 +111,37 @@ LIBINFO_COPTS = [
 # Make this path available for relative includes
 SRC_INCLUDES = ["-Iexternal/tvm++tvm_overlay+tvm-project/src"]
 
+# Runtime-safe support utilities (no IR dependencies)
+# Used by //src/runtime which doesn't have IR types
 cc_library(
-    name = "support",
-    srcs = glob(["*.cc"]),
+    name = "support_runtime",
+    srcs = [
+        "hexdump.cc",
+        "libinfo.cc",
+        "parallel_for.cc",
+    ],
     hdrs = glob(["*.h"]),
     copts = COPTS + LIBINFO_COPTS,
     deps = [
         "//:tvm_headers",
         "//3rdparty/tvm-ffi:tvm_ffi",
+    ],
+)
+
+# Full support library including IR-dependent code
+# Used by compiler targets that have //src/ir
+cc_library(
+    name = "support",
+    srcs = [
+        "ffi_testing.cc",
+        "scalars.cc",
+    ],
+    hdrs = glob(["*.h"]),
+    copts = COPTS + LIBINFO_COPTS,
+    deps = [
+        ":support_runtime",
+        "//:tvm_headers",
+        "//3rdparty/tvm-ffi:tvm_ffi",
+        "//src/ir",  # For PrimExpr, IntImm, FloatImm
     ],
 )
