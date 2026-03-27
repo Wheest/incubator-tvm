@@ -79,11 +79,11 @@ cc_library(
         "3rdparty/libbacktrace/backtrace.c",
         "3rdparty/libbacktrace/dwarf.c",
         "3rdparty/libbacktrace/fileline.c",
-        "3rdparty/libbacktrace/mmapio.c",
+        "3rdparty/libbacktrace/mmapio.c",  # Provides backtrace_get_view (with HAVE_MMAP)
         "3rdparty/libbacktrace/mmap.c",
         "3rdparty/libbacktrace/posix.c",
         "3rdparty/libbacktrace/print.c",
-        "3rdparty/libbacktrace/read.c",
+        # Note: read.c excluded - conflicts with mmapio.c (both define backtrace_get_view)
         "3rdparty/libbacktrace/sort.c",
         "3rdparty/libbacktrace/state.c",
         "3rdparty/libbacktrace/simple.c",
