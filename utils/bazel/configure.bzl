@@ -98,9 +98,13 @@ def _tvm_configure_impl(repository_ctx):
     # Set up 3rdparty/ directory - special handling for tvm-ffi
     _setup_3rdparty_directory(repository_ctx, tvm_root, overlay_path)
 
-    # Root BUILD.bazel
+    # Root BUILD.bazel and tvm_rules.bzl
     root_build = overlay_path.get_child("BUILD.bazel")
     repository_ctx.symlink(root_build, "BUILD.bazel")
+
+    tvm_rules = overlay_path.get_child("tvm_rules.bzl")
+    if tvm_rules.exists:
+        repository_ctx.symlink(tvm_rules, "tvm_rules.bzl")
 
     # Generate config header
     repository_ctx.file(
@@ -297,7 +301,7 @@ def _generate_config_header(use_llvm, use_rpc):
     ]
 
     if use_llvm:
-        lines.append("#define TVM_LLVM_VERSION 190")  # LLVM 19.x
+        lines.append("#define TVM_LLVM_VERSION 220")  # LLVM 22.x
 
     if use_rpc:
         lines.append("#define USE_RPC 1")

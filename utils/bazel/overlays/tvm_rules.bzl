@@ -15,25 +15,16 @@
 # specific language governing permissions and limitations
 # under the License.
 
-"""BUILD file for TVM Tensor Expression."""
+"""Common build definitions for TVM Bazel overlay."""
 
-load("@rules_cc//cc:defs.bzl", "cc_library")
-load("//:tvm_rules.bzl", "TVM_COPTS", "TVM_SRC_INCLUDES")
+# Standard compiler options for TVM C++ code
+TVM_COPTS = [
+    "-Wall",
+    "-fPIC",
+    "-std=c++17",
+    "-DTVM_INDEX_DEFAULT_I64=1",
+    "-faligned-allocation",
+]
 
-package(default_visibility = ["//visibility:public"])
-
-cc_library(
-    name = "te",
-    srcs = glob(["**/*.cc"], allow_empty = True),
-    hdrs = glob(["**/*.h"], allow_empty = True),
-    copts = TVM_COPTS + TVM_SRC_INCLUDES,
-    deps = [
-        "//:tvm_headers",
-        "//3rdparty/tvm-ffi:tvm_ffi",
-        "//src/arith",
-        "//src/ir",
-        "//src/node",
-        "//src/runtime",
-        "//src/support",
-    ],
-)
+# Include path for TVM src/ directory (enables relative includes like ../support/)
+TVM_SRC_INCLUDES = ["-Iexternal/tvm++tvm_overlay+tvm-project/src"]

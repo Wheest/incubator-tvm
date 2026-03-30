@@ -22,28 +22,22 @@ Users must provide their own hermetic LLVM in their MODULE.bazel.
 """
 
 load("@rules_cc//cc:defs.bzl", "cc_library")
+load("//:tvm_rules.bzl", "TVM_COPTS", "TVM_SRC_INCLUDES")
 
 package(default_visibility = ["//visibility:public"])
 
-# Note: -fno-rtti is required for LLVM
-COPTS = [
-    "-Wall",
-    "-fPIC",
-    "-std=c++17",
-    "-fno-rtti",
-    "-DTVM_INDEX_DEFAULT_I64=1",
-    "-DTVM_LLVM_VERSION=220",  # LLVM 22.x (from mono repo commit)
+# LLVM-specific copts (no RTTI, LLVM version, NDEBUG)
+LLVM_COPTS = TVM_COPTS + [
+    "-fno-rtti",  # Required for LLVM
+    "-DTVM_LLVM_VERSION=220",  # LLVM 22.x
     "-DNDEBUG=1",  # Required for LLVM
 ]
-
-# Make this path available for relative includes
-SRC_INCLUDES = ["-Iexternal/tvm++tvm_overlay+tvm-project/src"]
 
 cc_library(
     name = "llvm",
     srcs = glob(["*.cc"]) + ["//src/target:canonicalizer_llvm_srcs"],
     hdrs = glob(["*.h"]) + ["//src/target:canonicalizer_llvm_hdrs"],
-    copts = COPTS + SRC_INCLUDES,
+    copts = LLVM_COPTS + TVM_SRC_INCLUDES,
     # TVM uses TVM_REGISTER_GLOBAL for dynamic registration - must force-link
     alwayslink = True,
     deps = [

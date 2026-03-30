@@ -18,6 +18,7 @@
 """BUILD file for TVM target/codegen infrastructure."""
 
 load("@rules_cc//cc:defs.bzl", "cc_library")
+load("//:tvm_rules.bzl", "TVM_COPTS", "TVM_SRC_INCLUDES")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -32,17 +33,6 @@ filegroup(
     srcs = glob(["canonicalizer/llvm/*.h"]),
 )
 
-COPTS = [
-    "-Wall",
-    "-fPIC",
-    "-std=c++17",
-    "-DTVM_INDEX_DEFAULT_I64=1",
-    "-faligned-allocation",
-]
-
-# Make this path available for relative includes
-SRC_INCLUDES = ["-Iexternal/tvm++tvm_overlay+tvm-project/src"]
-
 # Headers-only target for cross-module includes
 # Note: canonicalizer/llvm/*.h are included here (just declarations, no LLVM deps)
 # but canonicalizer/llvm/*.cc are in //src/target/llvm (need LLVM)
@@ -56,7 +46,7 @@ cc_library(
         ],
         allow_empty = True,
     ),
-    copts = COPTS + SRC_INCLUDES,
+    copts = TVM_COPTS + TVM_SRC_INCLUDES,
     deps = [
         "//:tvm_headers",
         "//3rdparty/tvm-ffi:tvm_ffi",
@@ -79,7 +69,7 @@ cc_library(
         ],
         allow_empty = True,
     ),
-    copts = COPTS + SRC_INCLUDES,
+    copts = TVM_COPTS + TVM_SRC_INCLUDES,
     # TVM uses TVM_REGISTER_GLOBAL for dynamic registration - must force-link
     alwayslink = True,
     deps = [

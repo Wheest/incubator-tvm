@@ -26,8 +26,9 @@ exports_files([
 ])
 
 # Export overlay BUILD files for the configure rule
+# Note: glob doesn't cross package boundaries, so this is for files in this package only
 filegroup(
     name = "overlay_files",
-    srcs = glob(["overlays/**/*.bazel"]),
+    srcs = glob(["overlays/**/*.bazel", "overlays/**/*.bzl"], allow_empty = True),
     visibility = ["//visibility:public"],
 )

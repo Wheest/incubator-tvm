@@ -57,25 +57,6 @@ cc_library(
     ],
 )
 
-# Main TVM compiler library (static) - without LLVM
-cc_library(
-    name = "tvm_no_llvm",
-    deps = [
-        "//src/arith",
-        "//src/ir",
-        "//src/node",
-        "//src/relax",
-        "//src/runtime",
-        "//src/s_tir",
-        "//src/script",
-        "//src/support",
-        "//src/target",
-        "//src/te",
-        "//src/tirx",
-        "//src/topi",
-    ],
-)
-
 # Runtime-only library (shared)
 cc_shared_library(
     name = "libtvm_runtime",
@@ -106,34 +87,12 @@ cc_library(
     ],
 )
 
-# Common compiler defines
-COPTS = [
-    "-Wall",
-    "-fPIC",
-    "-O2",
-    "-DTVM_INDEX_DEFAULT_I64=1",
-] + select({
-    "@platforms//os:macos": ["-faligned-new"],
-    "@platforms//os:linux": ["-faligned-new"],
-    "//conditions:default": [],
-})
-
 # Compiler-RT headers (for fp16 builtins)
 cc_library(
     name = "compiler_rt_headers",
     hdrs = glob(["3rdparty/compiler-rt/*.h"]),
     includes = ["3rdparty/compiler-rt"],
 )
-
-# Shared copts for TVM source files
-# Provides src/ in include path for relative includes like ../support/
-TVM_SRC_COPTS = [
-    "-Wall",
-    "-fPIC",
-    "-std=c++17",
-    "-DTVM_INDEX_DEFAULT_I64=1",
-    "-faligned-allocation",
-]
 
 # Export for use in subpackages
 exports_files(["tvm_config.h"])
