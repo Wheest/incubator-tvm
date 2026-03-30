@@ -40,8 +40,37 @@ SRC_INCLUDES = [
 
 cc_library(
     name = "relax",
-    srcs = glob(["**/*.cc"], allow_empty = True),
-    hdrs = glob(["**/*.h"], allow_empty = True),
+    # Explicit includes because glob exclude doesn't work reliably with symlinked dirs
+    srcs = glob([
+        "*.cc",
+        "analysis/**/*.cc",
+        "backend/*.cc",  # pattern_registry.cc, task_extraction.cc
+        "backend/adreno/**/*.cc",
+        "backend/vm/**/*.cc",
+        # backend/contrib/**/*.cc excluded - requires CUDA/cuDNN/etc.
+        "distributed/**/*.cc",
+        "ir/**/*.cc",
+        "op/**/*.cc",
+        "testing/**/*.cc",
+        "training/**/*.cc",
+        "transform/**/*.cc",
+    ], allow_empty = True),
+    hdrs = glob([
+        "*.h",
+        "analysis/**/*.h",
+        "backend/*.h",
+        "backend/adreno/**/*.h",
+        "backend/vm/**/*.h",
+        "backend/contrib/codegen_c/**/*.h",  # Base codegen headers needed by other code
+        "backend/contrib/codegen_json/**/*.h",
+        # backend/contrib/<vendor>/**/*.h excluded - vendor-specific
+        "distributed/**/*.h",
+        "ir/**/*.h",
+        "op/**/*.h",
+        "testing/**/*.h",
+        "training/**/*.h",
+        "transform/**/*.h",
+    ], allow_empty = True),
     copts = COPTS + SRC_INCLUDES,
     deps = [
         "//:tvm_headers",
