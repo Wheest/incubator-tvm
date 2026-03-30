@@ -61,6 +61,8 @@ cc_library(
     ], allow_empty = True),
     copts = COPTS + SRC_INCLUDES,
     includes = ["."],
+    # TVM uses TVM_REGISTER_GLOBAL for device API registration - must force-link
+    alwayslink = True,
     linkopts = select({
         "@platforms//os:linux": ["-lpthread", "-ldl"],
         "@platforms//os:macos": ["-lpthread"],

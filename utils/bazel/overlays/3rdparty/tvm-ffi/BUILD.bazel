@@ -18,6 +18,7 @@
 """BUILD file for TVM FFI - Foreign Function Interface layer."""
 
 load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_python//python:defs.bzl", "py_library")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -148,4 +149,14 @@ cat > $(location 3rdparty/libbacktrace/backtrace-supported.h) << 'EOF'
 #define BACKTRACE_SUPPORTS_DATA 1
 EOF
 """,
+)
+
+# Python FFI bindings
+py_library(
+    name = "tvm_ffi_python",
+    srcs = glob(["python/tvm_ffi/**/*.py"]),
+    data = [
+        "//:libtvm",
+    ],
+    imports = ["python"],
 )

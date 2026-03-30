@@ -29,7 +29,7 @@ py_library(
     ],
     imports = ["."],
     deps = [
-        # Users should add their Python deps here via a wrapper
+        "//3rdparty/tvm-ffi:tvm_ffi_python",
     ],
 )
 

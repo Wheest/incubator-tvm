@@ -44,6 +44,8 @@ cc_library(
     srcs = glob(["*.cc"]) + ["//src/target:canonicalizer_llvm_srcs"],
     hdrs = glob(["*.h"]) + ["//src/target:canonicalizer_llvm_hdrs"],
     copts = COPTS + SRC_INCLUDES,
+    # TVM uses TVM_REGISTER_GLOBAL for dynamic registration - must force-link
+    alwayslink = True,
     deps = [
         "//:tvm_headers",
         "//3rdparty/tvm-ffi:tvm_ffi",

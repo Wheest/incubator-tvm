@@ -84,11 +84,13 @@ def _tvm_configure_impl(repository_ctx):
         if src.exists:
             repository_ctx.symlink(src, item)
 
-    # Symlink include and python directories directly
-    for item in ["include", "python"]:
-        src = tvm_root.get_child(item)
-        if src.exists:
-            repository_ctx.symlink(src, item)
+    # Symlink include directory directly
+    include_src = tvm_root.get_child("include")
+    if include_src.exists:
+        repository_ctx.symlink(include_src, "include")
+
+    # Set up python/ directory with BUILD file overlay
+    _setup_python_directory(repository_ctx, tvm_root, overlay_path)
 
     # Set up src/ directory
     _setup_src_directory(repository_ctx, tvm_root, overlay_path)
@@ -165,6 +167,26 @@ def _symlink_dir_contents_flat(repository_ctx, src_dir, dest_dir, parent_name, n
                     repository_ctx.symlink(nested_entry, dest + "/" + nested_entry.basename)
         else:
             repository_ctx.symlink(entry, dest)
+
+def _setup_python_directory(repository_ctx, tvm_root, overlay_path):
+    """Set up python/ directory with BUILD file overlay.
+
+    Symlinks Python source files and adds our BUILD.bazel for py_library targets.
+    """
+    python_src = tvm_root.get_child("python")
+    if not python_src.exists:
+        return
+
+    # Symlink Python source files
+    for entry in python_src.readdir():
+        if entry.basename not in ["BUILD.bazel", "BUILD"]:
+            repository_ctx.symlink(entry, "python/" + entry.basename)
+
+    # Add BUILD file from overlay
+    overlay_build = overlay_path.get_child("python").get_child("BUILD.bazel")
+    if overlay_build.exists:
+        content = repository_ctx.read(overlay_build)
+        repository_ctx.file("python/BUILD.bazel", content)
 
 def _setup_3rdparty_directory(repository_ctx, tvm_root, overlay_path):
     """Set up 3rdparty/ directory with special handling for tvm-ffi and its deps.

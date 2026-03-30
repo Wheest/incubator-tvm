@@ -80,6 +80,8 @@ cc_library(
         allow_empty = True,
     ),
     copts = COPTS + SRC_INCLUDES,
+    # TVM uses TVM_REGISTER_GLOBAL for dynamic registration - must force-link
+    alwayslink = True,
     deps = [
         ":target_hdrs",
         "//src/arith",
