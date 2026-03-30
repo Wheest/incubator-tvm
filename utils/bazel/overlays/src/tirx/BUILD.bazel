@@ -42,6 +42,8 @@ cc_library(
     srcs = glob(["**/*.cc"], allow_empty = True),
     hdrs = glob(["**/*.h"], allow_empty = True),
     copts = COPTS + SRC_INCLUDES,
+    # TVM uses TVM_REGISTER_GLOBAL for dynamic registration - must force-link
+    alwayslink = True,
     deps = [
         "//:tvm_headers",
         "//:tvm_internal_hdrs",  # For cross-module relative includes
