@@ -18,7 +18,7 @@
 """BUILD file for TVM S-TIR (Scheduling TIR)."""
 
 load("@rules_cc//cc:defs.bzl", "cc_library")
-load("//:tvm_rules.bzl", "TVM_COPTS", "TVM_SRC_INCLUDES")
+load("//:tvm_rules.bzl", "TVM_COPTS")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -26,9 +26,10 @@ cc_library(
     name = "s_tir",
     srcs = glob(["**/*.cc"], allow_empty = True),
     hdrs = glob(["**/*.h"], allow_empty = True),
-    copts = TVM_COPTS + TVM_SRC_INCLUDES,
+    copts = TVM_COPTS,
     deps = [
         "//:tvm_headers",
+        "//:tvm_internal_hdrs",
         "//3rdparty/tvm-ffi:tvm_ffi",
         "//src/arith",
         "//src/ir",

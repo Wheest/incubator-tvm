@@ -18,7 +18,7 @@
 """BUILD file for TVM target/codegen infrastructure."""
 
 load("@rules_cc//cc:defs.bzl", "cc_library")
-load("//:tvm_rules.bzl", "TVM_COPTS", "TVM_SRC_INCLUDES")
+load("//:tvm_rules.bzl", "TVM_COPTS")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -34,23 +34,22 @@ filegroup(
 )
 
 # Headers-only target for cross-module includes
-# Note: canonicalizer/llvm/*.h are included here (just declarations, no LLVM deps)
-# but canonicalizer/llvm/*.cc are in //src/target/llvm (need LLVM)
 cc_library(
     name = "target_hdrs",
     hdrs = glob(
         ["**/*.h"],
         exclude = [
-            "llvm/**",  # LLVM codegen headers go with llvm target
-            "spirv/**",  # SPIRV/Vulkan requires vulkan headers
+            "llvm/**",
+            "spirv/**",
         ],
         allow_empty = True,
     ),
-    copts = TVM_COPTS + TVM_SRC_INCLUDES,
+    copts = TVM_COPTS,
     deps = [
         "//:tvm_headers",
+        "//:tvm_internal_hdrs",
         "//3rdparty/tvm-ffi:tvm_ffi",
-        "//src/runtime",  # For ../../runtime/spirv/spirv_shader.h includes
+        "//src/runtime",
     ],
 )
 
@@ -61,19 +60,19 @@ cc_library(
         ["**/*.cc"],
         exclude = [
             "llvm/**",
-            "canonicalizer/llvm/**",  # LLVM-specific implementations
-            "spirv/**",  # SPIRV/Vulkan requires vulkan headers
-            "source/codegen_opencl.cc",  # Depends on spirv
-            "opt/*_on.cc",  # Backend-specific implementations requiring SDKs
-            "datatype/posit/**",  # Requires universal posit library
+            "canonicalizer/llvm/**",
+            "spirv/**",
+            "source/codegen_opencl.cc",
+            "opt/*_on.cc",
+            "datatype/posit/**",
         ],
         allow_empty = True,
     ),
-    copts = TVM_COPTS + TVM_SRC_INCLUDES,
-    # TVM uses TVM_REGISTER_GLOBAL for dynamic registration - must force-link
+    copts = TVM_COPTS,
     alwayslink = True,
     deps = [
         ":target_hdrs",
+        "//:tvm_internal_hdrs",
         "//src/arith",
         "//src/ir",
         "//src/node",

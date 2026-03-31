@@ -22,26 +22,27 @@ Users must provide their own hermetic LLVM in their MODULE.bazel.
 """
 
 load("@rules_cc//cc:defs.bzl", "cc_library")
-load("//:tvm_rules.bzl", "TVM_COPTS", "TVM_SRC_INCLUDES")
+load("//:tvm_rules.bzl", "TVM_COPTS")
 
 package(default_visibility = ["//visibility:public"])
 
-# LLVM-specific copts (no RTTI, LLVM version, NDEBUG)
+# LLVM-specific copts
 LLVM_COPTS = TVM_COPTS + [
-    "-fno-rtti",  # Required for LLVM
-    "-DTVM_LLVM_VERSION=220",  # LLVM 22.x
-    "-DNDEBUG=1",  # Required for LLVM
+    "-fno-rtti",
+    "-DTVM_LLVM_VERSION=220",
+    "-DNDEBUG=1",
 ]
 
 cc_library(
     name = "llvm",
     srcs = glob(["*.cc"]) + ["//src/target:canonicalizer_llvm_srcs"],
     hdrs = glob(["*.h"]) + ["//src/target:canonicalizer_llvm_hdrs"],
-    copts = LLVM_COPTS + TVM_SRC_INCLUDES,
+    copts = LLVM_COPTS,
     # TVM uses TVM_REGISTER_GLOBAL for dynamic registration - must force-link
     alwayslink = True,
     deps = [
         "//:tvm_headers",
+        "//:tvm_internal_hdrs",
         "//3rdparty/tvm-ffi:tvm_ffi",
         "//src/arith",
         "//src/ir",

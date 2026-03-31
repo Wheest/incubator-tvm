@@ -18,7 +18,7 @@
 """BUILD file for TVM runtime."""
 
 load("@rules_cc//cc:defs.bzl", "cc_library")
-load("//:tvm_rules.bzl", "TVM_COPTS", "TVM_SRC_INCLUDES")
+load("//:tvm_rules.bzl", "TVM_COPTS")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -37,7 +37,7 @@ cc_library(
         ],
         exclude = [
             "**/*_test.cc",
-            "disco/distributed/*.cc",  # Handled via select below
+            "disco/distributed/*.cc",
         ],
         allow_empty = True,
     ) + select({
@@ -47,10 +47,9 @@ cc_library(
     }),
     hdrs = glob([
         "*.h",
-        "**/*.h",  # Include all subdirectory headers
+        "**/*.h",
     ], allow_empty = True),
-    copts = TVM_COPTS + TVM_SRC_INCLUDES,
-    # TVM uses TVM_REGISTER_GLOBAL for device API registration - must force-link
+    copts = TVM_COPTS,
     alwayslink = True,
     linkopts = select({
         "@platforms//os:linux": ["-lpthread", "-ldl"],
@@ -59,9 +58,10 @@ cc_library(
     }),
     deps = [
         "//:tvm_headers",
+        "//:tvm_internal_hdrs",
         "//:compiler_rt_headers",
         "//3rdparty/tvm-ffi:tvm_ffi",
         "//3rdparty/tvm-ffi:tvm_ffi_extra",
-        "//src/support:support_runtime",  # Runtime-safe subset (no IR deps)
+        "//src/support:support_runtime",
     ],
 )

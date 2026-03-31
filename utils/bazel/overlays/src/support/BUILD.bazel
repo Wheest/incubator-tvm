@@ -18,7 +18,7 @@
 """BUILD file for TVM support utilities."""
 
 load("@rules_cc//cc:defs.bzl", "cc_library")
-load("//:tvm_rules.bzl", "TVM_COPTS", "TVM_SRC_INCLUDES")
+load("//:tvm_rules.bzl", "TVM_COPTS")
 
 package(default_visibility = ["//visibility:public"])
 

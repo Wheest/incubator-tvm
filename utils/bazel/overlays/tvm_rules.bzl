@@ -25,6 +25,3 @@ TVM_COPTS = [
     "-DTVM_INDEX_DEFAULT_I64=1",
     "-faligned-allocation",
 ]
-
-# Include path for TVM src/ directory (enables relative includes like ../support/)
-TVM_SRC_INCLUDES = ["-Iexternal/tvm++tvm_overlay+tvm-project/src"]

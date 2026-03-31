@@ -18,25 +18,22 @@
 """BUILD file for TVM TIR extensions."""
 
 load("@rules_cc//cc:defs.bzl", "cc_library")
-load("//:tvm_rules.bzl", "TVM_COPTS", "TVM_SRC_INCLUDES")
+load("//:tvm_rules.bzl", "TVM_COPTS")
 
 package(default_visibility = ["//visibility:public"])
-
-# Additional include for tirx subdir (for relative includes from analysis/)
-TIRX_INCLUDES = TVM_SRC_INCLUDES + ["-Iexternal/tvm++tvm_overlay+tvm-project/src/tirx"]
 
 cc_library(
     name = "tirx",
     srcs = glob(["**/*.cc"], allow_empty = True),
     hdrs = glob(["**/*.h"], allow_empty = True),
-    copts = TVM_COPTS + TIRX_INCLUDES,
-    # TVM uses TVM_REGISTER_GLOBAL for dynamic registration - must force-link
+    copts = TVM_COPTS,
+    includes = ["."],  # For relative includes from analysis/
     alwayslink = True,
     deps = [
         "//:tvm_headers",
-        "//:tvm_internal_hdrs",  # For cross-module relative includes
+        "//:tvm_internal_hdrs",
         "//3rdparty/tvm-ffi:tvm_ffi",
-        "//src/arith:arith_hdrs",  # Headers only to break cycle (arith links to tirx)
+        "//src/arith:arith_hdrs",
         "//src/ir",
         "//src/node",
         "//src/runtime",

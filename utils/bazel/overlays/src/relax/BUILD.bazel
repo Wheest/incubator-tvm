@@ -18,12 +18,9 @@
 """BUILD file for TVM Relax (next-gen relay)."""
 
 load("@rules_cc//cc:defs.bzl", "cc_library")
-load("//:tvm_rules.bzl", "TVM_COPTS", "TVM_SRC_INCLUDES")
+load("//:tvm_rules.bzl", "TVM_COPTS")
 
 package(default_visibility = ["//visibility:public"])
-
-# Additional include for relax/transform subdir
-RELAX_INCLUDES = TVM_SRC_INCLUDES + ["-Iexternal/tvm++tvm_overlay+tvm-project/src/relax/transform"]
 
 # macOS requires deployment target for std::filesystem
 MACOS_COPTS = select({
@@ -33,14 +30,12 @@ MACOS_COPTS = select({
 
 cc_library(
     name = "relax",
-    # Explicit includes because glob exclude doesn't work reliably with symlinked dirs
     srcs = glob([
         "*.cc",
         "analysis/**/*.cc",
-        "backend/*.cc",  # pattern_registry.cc, task_extraction.cc
+        "backend/*.cc",
         "backend/adreno/**/*.cc",
         "backend/vm/**/*.cc",
-        # backend/contrib/**/*.cc excluded - requires CUDA/cuDNN/etc.
         "distributed/**/*.cc",
         "ir/**/*.cc",
         "op/**/*.cc",
@@ -54,9 +49,8 @@ cc_library(
         "backend/*.h",
         "backend/adreno/**/*.h",
         "backend/vm/**/*.h",
-        "backend/contrib/codegen_c/**/*.h",  # Base codegen headers needed by other code
+        "backend/contrib/codegen_c/**/*.h",
         "backend/contrib/codegen_json/**/*.h",
-        # backend/contrib/<vendor>/**/*.h excluded - vendor-specific
         "distributed/**/*.h",
         "ir/**/*.h",
         "op/**/*.h",
@@ -64,9 +58,11 @@ cc_library(
         "training/**/*.h",
         "transform/**/*.h",
     ], allow_empty = True),
-    copts = TVM_COPTS + RELAX_INCLUDES + MACOS_COPTS,
+    copts = TVM_COPTS + MACOS_COPTS,
+    includes = ["transform"],  # For relative includes from transform/
     deps = [
         "//:tvm_headers",
+        "//:tvm_internal_hdrs",
         "//3rdparty/tvm-ffi:tvm_ffi",
         "//src/arith",
         "//src/ir",
