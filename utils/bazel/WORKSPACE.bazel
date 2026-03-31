@@ -39,7 +39,7 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 http_archive(
     name = "bazel_skylib",
-    sha256 = "bc283cdfcd526a52c3201279cda4bc298652uj1a0bbd8a8af2f1f5d7d2a0f60",
+    sha256 = "bc283cdfcd526a52c3201279cda4bc298652efa2a8be0b327d6e7bc6b2289a05",
     urls = ["https://github.com/bazelbuild/bazel-skylib/releases/download/1.7.1/bazel-skylib-1.7.1.tar.gz"],
 )
 

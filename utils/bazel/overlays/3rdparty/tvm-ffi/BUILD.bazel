@@ -19,14 +19,9 @@
 
 load("@rules_cc//cc:defs.bzl", "cc_library")
 load("@rules_python//python:defs.bzl", "py_library")
+load("//:tvm_rules.bzl", "TVM_COPTS")
 
 package(default_visibility = ["//visibility:public"])
-
-COPTS = [
-    "-Wall",
-    "-fPIC",
-    "-std=c++17",
-]
 
 # DLPack headers (included within tvm-ffi)
 cc_library(
@@ -53,7 +48,7 @@ cc_library(
         exclude = ["src/ffi/testing/**"],
     ),
     hdrs = glob(["src/ffi/*.h"]),
-    copts = COPTS,
+    copts = TVM_COPTS,
     deps = [
         ":tvm_ffi_headers",
         ":libbacktrace",
@@ -65,7 +60,7 @@ cc_library(
     name = "tvm_ffi_extra",
     srcs = glob(["src/ffi/extra/*.cc"]),
     hdrs = glob(["src/ffi/extra/*.h"]),
-    copts = COPTS,
+    copts = TVM_COPTS,
     includes = ["src/ffi/extra"],
     deps = [
         ":tvm_ffi",

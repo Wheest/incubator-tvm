@@ -50,7 +50,6 @@ cc_library(
         "**/*.h",  # Include all subdirectory headers
     ], allow_empty = True),
     copts = TVM_COPTS + TVM_SRC_INCLUDES,
-    includes = ["."],
     # TVM uses TVM_REGISTER_GLOBAL for device API registration - must force-link
     alwayslink = True,
     linkopts = select({
