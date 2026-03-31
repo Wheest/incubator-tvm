@@ -1,0 +1,47 @@
+--- a/3rdparty/tvm-ffi/python/tvm_ffi/libinfo.py
++++ b/3rdparty/tvm-ffi/python/tvm_ffi/libinfo.py
+@@ -229,16 +229,28 @@ def _find_library_by_basename(package: str, target_name: str) -> Path:  # noqa:
+     else:  # Linux, FreeBSD, etc
+         lib_dll_names = (f"lib{target_name}.so",)
+
+-    # Use `importlib.metadata` is the most reliable way to find package data files
+-    dist: im.PathDistribution = im.distribution(package)  # type: ignore[assignment]
+-    record = dist.read_text("RECORD") or ""
+-    for line in record.splitlines():
+-        partial_path, *_ = line.split(",")
+-        if partial_path.endswith(lib_dll_names):
+-            try:
+-                path = (dist._path.parent / partial_path).resolve()
+-            except OSError:
+-                continue
+-            if path.name in lib_dll_names:
+-                return path
++    # Check Bazel runfiles directory first (for Bazel builds)
++    runfiles_dir = os.environ.get("RUNFILES_DIR")
++    if runfiles_dir:
++        for lib_dll_name in lib_dll_names:
++            try:
++                path = (Path(runfiles_dir) / lib_dll_name).resolve()
++                if path.is_file():
++                    return path
++            except OSError:
++                continue
++
++    # Use `importlib.metadata` is the most reliable way to find package data files.
++    # Wrap in try/except to support non-pip installations (Bazel, CMake, conda, etc.)
++    try:
++        dist: im.PathDistribution = im.distribution(package)  # type: ignore[assignment]
++        record = dist.read_text("RECORD") or ""
++        for line in record.splitlines():
++            partial_path, *_ = line.split(",")
++            if partial_path.endswith(lib_dll_names):
++                try:
++                    path = (dist._path.parent / partial_path).resolve()
++                except OSError:
++                    continue
++                if path.name in lib_dll_names:
++                    return path
++    except im.PackageNotFoundError:
++        pass  # Fall through to environment-based fallback paths below
+
+     # **Fallback**. it's possible that the library is not built as part of Python ecosystem,

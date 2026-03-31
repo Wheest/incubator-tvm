@@ -1,0 +1,79 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+"""BUILD file for TVM LLVM codegen.
+
+This depends on user-provided @llvm-project for LLVM libraries.
+Users must provide their own hermetic LLVM in their MODULE.bazel.
+"""
+
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("//:tvm_rules.bzl", "TVM_COPTS")
+
+package(default_visibility = ["//visibility:public"])
+
+# LLVM-specific copts
+LLVM_COPTS = TVM_COPTS + [
+    "-fno-rtti",
+    "-DTVM_LLVM_VERSION=220",
+    "-DNDEBUG=1",
+]
+
+cc_library(
+    name = "llvm",
+    srcs = glob(["*.cc"]) + ["//src/target:canonicalizer_llvm_srcs"],
+    hdrs = glob(["*.h"]) + ["//src/target:canonicalizer_llvm_hdrs"],
+    copts = LLVM_COPTS,
+    # TVM uses TVM_REGISTER_GLOBAL for dynamic registration - must force-link
+    alwayslink = True,
+    deps = [
+        "//:tvm_headers",
+        "//:tvm_internal_hdrs",
+        "//3rdparty/tvm-ffi:tvm_ffi",
+        "//src/arith",
+        "//src/ir",
+        "//src/node",
+        "//src/runtime",
+        "//src/support",
+        "//src/target",
+        "//src/te",
+        "//src/tirx",
+        # LLVM dependencies - user provides @llvm-project
+        "@llvm-project//llvm:Analysis",
+        "@llvm-project//llvm:BinaryFormat",
+        "@llvm-project//llvm:BitReader",
+        "@llvm-project//llvm:BitWriter",
+        "@llvm-project//llvm:CodeGen",
+        "@llvm-project//llvm:Core",
+        "@llvm-project//llvm:ExecutionEngine",
+        "@llvm-project//llvm:IRPrinter",
+        "@llvm-project//llvm:IRReader",
+        "@llvm-project//llvm:MC",
+        "@llvm-project//llvm:MCJIT",
+        "@llvm-project//llvm:OrcJIT",
+        "@llvm-project//llvm:OrcTargetProcess",
+        "@llvm-project//llvm:Passes",
+        "@llvm-project//llvm:Support",
+        "@llvm-project//llvm:Target",
+        "@llvm-project//llvm:TransformUtils",
+        # TVM initializes all known targets, so include both for cross-compilation
+        "@llvm-project//llvm:AArch64AsmParser",
+        "@llvm-project//llvm:AArch64CodeGen",
+        "@llvm-project//llvm:X86AsmParser",
+        "@llvm-project//llvm:X86CodeGen",
+    ],
+)

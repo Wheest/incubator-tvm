@@ -1,0 +1,135 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+"""BUILD file for TVM support utilities."""
+
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("//:tvm_rules.bzl", "TVM_COPTS")
+
+package(default_visibility = ["//visibility:public"])
+
+# Defines for libinfo.cc - configuration information
+# Use -D flags with proper quoting
+LIBINFO_COPTS = [
+    '-DTVM_CXX_COMPILER_PATH=\'"clang++"\'',
+    '-DTVM_INFO_BUILD_STATIC_RUNTIME=\'"OFF"\'',
+    '-DTVM_INFO_BUILD_DUMMY_LIBTVM=\'"OFF"\'',
+    '-DTVM_INFO_COMPILER_RT_PATH=\'""\'',
+    '-DTVM_INFO_CUDA_VERSION=\'"NOT-FOUND"\'',
+    '-DTVM_INFO_GIT_COMMIT_HASH=\'"bazel-build"\'',
+    '-DTVM_INFO_GIT_COMMIT_TIME=\'"unknown"\'',
+    '-DTVM_INFO_HIDE_PRIVATE_SYMBOLS=\'"OFF"\'',
+    '-DTVM_INFO_INDEX_DEFAULT_I64=\'"ON"\'',
+    '-DTVM_INFO_INSTALL_DEV=\'"OFF"\'',
+    '-DTVM_INFO_LLVM_VERSION=\'"22.0.0"\'',
+    '-DTVM_INFO_MLIR_VERSION=\'"NOT-FOUND"\'',
+    '-DTVM_INFO_RANG_PATH=\'""\'',
+    '-DTVM_INFO_ROCM_PATH=\'"NOT-FOUND"\'',
+    '-DTVM_INFO_SUMMARIZE=\'"OFF"\'',
+    '-DTVM_INFO_USE_ALTERNATIVE_LINKER=\'"OFF"\'',
+    '-DTVM_INFO_USE_BLAS=\'"none"\'',
+    '-DTVM_INFO_USE_BYODT_POSIT=\'"OFF"\'',
+    '-DTVM_INFO_USE_COREML=\'"OFF"\'',
+    '-DTVM_INFO_USE_CPP_RPC=\'"OFF"\'',
+    '-DTVM_INFO_USE_CPP_RTVM=\'"OFF"\'',
+    '-DTVM_INFO_USE_CUBLAS=\'"OFF"\'',
+    '-DTVM_INFO_USE_CUDA=\'"OFF"\'',
+    '-DTVM_INFO_USE_NVTX=\'"OFF"\'',
+    '-DTVM_INFO_USE_NCCL=\'"OFF"\'',
+    '-DTVM_INFO_USE_CUDNN=\'"OFF"\'',
+    '-DTVM_INFO_USE_CUSTOM_LOGGING=\'"OFF"\'',
+    '-DTVM_INFO_USE_CUTLASS=\'"OFF"\'',
+    '-DTVM_INFO_USE_AMX=\'"OFF"\'',
+    '-DTVM_INFO_USE_DNNL=\'"OFF"\'',
+    '-DTVM_INFO_USE_GTEST=\'"OFF"\'',
+    '-DTVM_INFO_USE_HEXAGON=\'"OFF"\'',
+    '-DTVM_INFO_USE_HEXAGON_RPC=\'"OFF"\'',
+    '-DTVM_INFO_USE_HEXAGON_SDK=\'"OFF"\'',
+    '-DTVM_INFO_USE_HEXAGON_GTEST=\'"OFF"\'',
+    '-DTVM_INFO_USE_HEXAGON_EXTERNAL_LIBS=\'"OFF"\'',
+    '-DTVM_INFO_USE_IOS_RPC=\'"OFF"\'',
+    '-DTVM_INFO_USE_KHRONOS_SPIRV=\'"OFF"\'',
+    '-DTVM_INFO_USE_LLVM=\'"ON"\'',
+    '-DTVM_INFO_USE_MLIR=\'"OFF"\'',
+    '-DTVM_INFO_USE_METAL=\'"OFF"\'',
+    '-DTVM_INFO_USE_MKL=\'"OFF"\'',
+    '-DTVM_INFO_USE_MSVC_MT=\'"OFF"\'',
+    '-DTVM_INFO_USE_OPENCL=\'"OFF"\'',
+    '-DTVM_INFO_USE_OPENCL_ENABLE_HOST_PTR=\'"OFF"\'',
+    '-DTVM_INFO_USE_OPENCL_GTEST=\'"OFF"\'',
+    '-DTVM_INFO_USE_OPENMP=\'"OFF"\'',
+    '-DTVM_INFO_USE_RANDOM=\'"ON"\'',
+    '-DTVM_INFO_TVM_DEBUG_WITH_ABI_CHANGE=\'"OFF"\'',
+    '-DTVM_INFO_TVM_LOG_BEFORE_THROW=\'"OFF"\'',
+    '-DTVM_INFO_USE_HIPBLAS=\'"OFF"\'',
+    '-DTVM_INFO_USE_ROCM=\'"OFF"\'',
+    '-DTVM_INFO_USE_RCCL=\'"OFF"\'',
+    '-DTVM_INFO_USE_RPC=\'"ON"\'',
+    '-DTVM_INFO_TVM_BUILD_PYTHON_MODULE=\'"OFF"\'',
+    '-DTVM_INFO_USE_RTTI=\'"ON"\'',
+    '-DTVM_INFO_USE_RUST_EXT=\'"OFF"\'',
+    '-DTVM_INFO_USE_SORT=\'"ON"\'',
+    '-DTVM_INFO_USE_SPIRV_KHR_INTEGER_DOT_PRODUCT=\'"OFF"\'',
+    '-DTVM_INFO_USE_TENSORRT_CODEGEN=\'"OFF"\'',
+    '-DTVM_INFO_USE_TENSORRT_RUNTIME=\'"OFF"\'',
+    '-DTVM_INFO_USE_NNAPI_CODEGEN=\'"OFF"\'',
+    '-DTVM_INFO_USE_NNAPI_RUNTIME=\'"OFF"\'',
+    '-DTVM_INFO_USE_THREADS=\'"ON"\'',
+    '-DTVM_INFO_USE_THRUST=\'"OFF"\'',
+    '-DTVM_INFO_USE_CLML=\'"OFF"\'',
+    '-DTVM_INFO_USE_CLML_GRAPH_EXECUTOR=\'"OFF"\'',
+    '-DTVM_INFO_USE_TVM_CLML_VERSION=\'"NOT-FOUND"\'',
+    '-DTVM_INFO_USE_NVSHMEM=\'"OFF"\'',
+    '-DTVM_INFO_USE_VULKAN=\'"OFF"\'',
+    '-DTVM_INFO_USE_CURAND=\'"OFF"\'',
+    '-DTVM_INFO_USE_CCACHE=\'"OFF"\'',
+]
+
+# Runtime-safe support utilities (no IR dependencies)
+# Used by //src/runtime which doesn't have IR types
+cc_library(
+    name = "support_runtime",
+    srcs = [
+        "hexdump.cc",
+        "libinfo.cc",
+        "parallel_for.cc",
+    ],
+    hdrs = glob(["*.h"]),
+    copts = TVM_COPTS + LIBINFO_COPTS,
+    deps = [
+        "//:tvm_headers",
+        "//3rdparty/tvm-ffi:tvm_ffi",
+    ],
+)
+
+# Full support library including IR-dependent code
+# Used by compiler targets that have //src/ir
+cc_library(
+    name = "support",
+    srcs = [
+        "ffi_testing.cc",
+        "scalars.cc",
+    ],
+    hdrs = glob(["*.h"]),
+    copts = TVM_COPTS + LIBINFO_COPTS,
+    deps = [
+        ":support_runtime",
+        "//:tvm_headers",
+        "//3rdparty/tvm-ffi:tvm_ffi",
+        "//src/ir",  # For PrimExpr, IntImm, FloatImm
+    ],
+)
